@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+streamlit
+pandas
+numpy
+yfinance
+python-dotenv
+pyyaml
+pydantic
+httpx
+pytest
+loguru
+finvizfinance

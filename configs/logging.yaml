@@ -1,0 +1,19 @@
+version: 1
+formatters:
+  simple:
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: simple
+    level: INFO
+  file:
+    class: logging.handlers.RotatingFileHandler
+    formatter: simple
+    filename: logs/forex_bot.log
+    maxBytes: 10485760
+    backupCount: 5
+    level: INFO
+root:
+  level: INFO
+  handlers: [console, file]
