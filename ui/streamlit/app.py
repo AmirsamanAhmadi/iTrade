@@ -423,13 +423,67 @@ if 'trading_data' not in st.session_state:
     st.session_state.trading_data = {}
 st.write("---")
 st.write("### 🎯 Trading Dashboard & Position Suggestions")
-    mds = None
-    try:
+
+mds = None
+try:
+    from services.market_data import MarketDataService
+    mds = MarketDataService()
+except Exception as e:
+    st.warning(f"Market data service not available: {e}")
+
+if mds:
+    # Combine default and user symbols
+    all_symbols = st.session_state.cfg.get("market_symbols", []) + st.session_state.cfg.get("user_symbols", [])
+    all_symbols = list(set(all_symbols))  # Remove duplicates
+    
+    col_a, col_b = st.columns([1, 3])
+    with col_a:
+        st.subheader("🔍 Trading Setup")
+        default_sym = st.session_state.cfg.get("default_symbol", "AAPL")
+        if default_sym not in all_symbols:
+            default_sym = all_symbols[0] if all_symbols else "AAPL"
+
+        symbol = st.selectbox("Select Trading Symbol", all_symbols, index=all_symbols.index(default_sym) if default_sym in all_symbols else 0)
+
+        intervals = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+        default_int = st.session_state.cfg.get("market_interval", "1h")
+        interval = st.selectbox("Timeframe", intervals, index=intervals.index(default_int) if default_int in intervals else 4)
+
+        # Chart data source selection
+        data_source_options = ["Market Data Service (Yahoo Finance)", "Simulated Data"]
+        default_source = st.session_state.cfg.get("chart_data_source", "Market Data Service (Yahoo Finance)")
+        chart_data_source = st.selectbox("📊 Chart Data Source", data_source_options, 
+                                       index=data_source_options.index(default_source) if default_source in data_source_options else 0)
+
+        # Trading configuration
+        st.write("**⚙️ Trading Configuration**")
+        account_balance = st.number_input("Account Balance ($)", min_value=100, max_value=1000000, value=10000)
+        risk_per_trade = st.slider("Risk per Trade (%)", 0.5, 10.0, 2.0, 0.5)
+        stop_loss_pct = st.slider("Stop Loss (%)", 0.5, 10.0, 2.0, 0.5)
+        take_profit_pct = st.slider("Take Profit (%)", 1.0, 20.0, 5.0, 0.5)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📊 Analyze & Get Signals", type="primary"):
+                st.session_state.analyze_triggered = True
+        with c2:
+            if st.button("💾 Save Settings"):
+                st.session_state.cfg["default_symbol"] = symbol
+                st.session_state.cfg["market_interval"] = interval
+                st.session_state.cfg["account_balance"] = account_balance
+                st.session_state.cfg["risk_per_trade"] = risk_per_trade
+                st.session_state.cfg["chart_data_source"] = chart_data_source
+                _save_config()
+                st.success("Settings saved!")
+
+    with col_b:
+        st.write("#### 🎯 Trading Signals & Position Suggestion")
+        
+        if st.session_state.get('analyze_triggered', False) or 'last_analysis' in st.session_state:
+            try:
                 # Fetch data for analysis
                 end = datetime.utcnow().date().isoformat()
                 start = (datetime.utcnow().date() - pd.Timedelta(days=7)).isoformat()
-                
-                df = None
                 # Use market data service
                 df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
                 if df is not None:
@@ -529,20 +583,25 @@ st.write("### 🎯 Trading Dashboard & Position Suggestions")
                     else:
                         st.warning("🟡 **HOLD** - Wait for better setup")
                     
-                    # Position Suggestion with multiple symbols
+                    # Position Suggestion for selected symbol only
                     st.write("#### 📈 Recommended Positions to Monitor")
-                    recommended_symbols = get_recommended_positions(all_symbols, df, latest_price)
+                    # Only analyze the SELECTED symbol
+                    recommended_positions = get_recommended_positions([symbol], df, latest_price)
                     
-                    for rec in recommended_symbols[:5]:  # Show top 5
-                        rec_col1, rec_col2, rec_col3, rec_col4 = st.columns(4)
-                        with rec_col1:
-                            st.metric(rec['symbol'], f"${rec['price']:.4f}")
-                        with rec_col2:
-                            st.metric("Signal", rec['signal'])
-                        with rec_col3:
-                            st.metric("Entry", f"${rec['entry']:.4f}")
-                        with rec_col4:
-                            st.metric("SL", f"${rec['stop_loss']:.4f}")
+                    if recommended_positions:
+                        st.info(f"💡 Showing recommendation for selected symbol: {symbol}")
+                        for rec in recommended_positions[:3]:  # Show top 3 for selected symbol
+                            rec_col1, rec_col2, rec_col3, rec_col4 = st.columns(4)
+                            with rec_col1:
+                                st.metric(rec['symbol'], f"${rec['price']:.4f}")
+                            with rec_col2:
+                                st.metric("Signal", rec['signal'])
+                            with rec_col3:
+                                st.metric("Entry", f"${rec['entry']:.4f}")
+                            with rec_col4:
+                                st.metric("SL", f"${rec['stop_loss']:.4f}")
+                    else:
+                        st.info(f"ℹ️ No clear signal for {symbol} - market in neutral zone")
                     
                 else:
                     st.error(f"❌ No data available for {symbol}")
@@ -560,11 +619,34 @@ st.write("### 🎯 Trading Dashboard & Position Suggestions")
                 end = datetime.utcnow().date().isoformat()
                 start = (datetime.utcnow().date() - pd.Timedelta(days=7)).isoformat()
                 
-                # Use market data service
-                df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                # Use selected data source
+                if chart_data_source == "Market Data Service (Yahoo Finance)":
+                    df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                    if df is not None:
+                        st.success(f"📊 Using {chart_data_source}")
+                else:
+                    # Simulated data for testing
+                    import numpy as np
+                    np.random.seed(42)
+                    dates = pd.date_range(start=start, periods=168, freq='H')  # 7 days hourly
+                    base_price = df['Close'].iloc[-1] if df is not None else 100.0
+                    prices = []
+                    for i in range(168):
+                        change = np.random.normal(0, base_price * 0.01)
+                        prices.append(max(base_price + change, 1.0))
+                        base_price = prices[-1]
+                    
+                    df = pd.DataFrame({
+                        'Open': prices,
+                        'High': [p * 1.01 for p in prices],
+                        'Low': [p * 0.99 for p in prices],
+                        'Close': prices,
+                        'Volume': [10000] * 168
+                    }, index=dates)
+                    st.warning(f"📊 Using {chart_data_source}")
                 
                 # Track data source for display
-                data_source = "Market Data Service"
+                data_source = chart_data_source
                 
                 if df is not None and not df.empty:
                     # Calculate indicators
@@ -831,6 +913,48 @@ st.write("### 🎯 Trading Dashboard & Position Suggestions")
                         st.metric("1D Change", f"{price_change_1d:+.2f}%")
                         st.metric("5D Change", f"{price_change_5d:+.2f}%")
                         st.metric("20D Change", f"{price_change_20d:+.2f}%")
+                    
+                    # Add new chart: Price Change Distribution
+                    st.write("**📊 Price Change Distribution (Multi-Timeframe)**")
+                    st.caption("View price performance across different timeframes")
+                    
+                    try:
+                        import altair as alt
+                        
+                        # Calculate price changes for different periods
+                        periods = [1, 5, 10, 20]  # days
+                        price_changes = []
+                        
+                        for period in periods:
+                            if len(df) > period:
+                                change_pct = ((df['Close'].iloc[-1] - df['Close'].iloc[-period]) / df['Close'].iloc[-period]) * 100
+                                price_changes.append({
+                                    'period': f'{period}D',
+                                    'change': change_pct,
+                                    'color': 'green' if change_pct > 0 else 'red'
+                                })
+                        
+                        if price_changes:
+                            change_df = pd.DataFrame(price_changes)
+                            
+                            # Create bar chart
+                            base = alt.Chart(change_df).encode(
+                                x=alt.X('period:N', title='Period'),
+                                y=alt.Y('change:Q', title='Change %'),
+                                color=alt.Color('color:N', legend=None)
+                            ).properties(height=200, width='container')
+                            
+                            bar_chart = base.mark_bar(size=40)
+                            
+                            # Add horizontal line at 0
+                            rule = alt.Chart(pd.DataFrame({'x': ['0%']})).mark_rule(
+                                color='gray', strokeDash=[2, 2], strokeWidth=1
+                            ).encode(x='x')
+                            
+                            st.altair_chart(bar_chart + rule, use_container_width=True)
+                            
+                    except Exception as e:
+                        st.warning(f"Price distribution chart error: {e}")
                     
                     # Trend Momentum Gauge
                     st.write("**📊 Trend Strength & Momentum**")
@@ -1109,14 +1233,14 @@ if st.button("🚀 Run Backtest", type="primary"):
                     signals = generate_trading_signals(df, strategy_type)
                     
                      # Calculate returns
-                     returns = calculate_backtest_returns(df, signals, initial_balance, risk_per_trade/100)
+                    returns = calculate_backtest_returns(df, signals, initial_balance, risk_per_trade/100)
                      
                          # Track backtest data source
-                     backtest_data_source = "Market Data Service (Yahoo Finance)"
+                    backtest_data_source = "Market Data Service (Yahoo Finance)"
                      
                      # Display results
-                     st.success("✅ Backtest completed!")
-                     st.caption(f"📡 Data Source: {backtest_data_source} | Symbol: {backtest_symbol} | Period: {backtest_days} days")
+                    st.success("✅ Backtest completed!")
+                    st.caption(f"📡 Data Source: {backtest_data_source} | Symbol: {backtest_symbol} | Period: {backtest_days} days")
                     
                     # Performance metrics
                     col1, col2, col3, col4 = st.columns(4)
@@ -1630,25 +1754,25 @@ if st.session_state.trading_data.get('current_symbol'):
                         sentiment = item.get('sentiment', 'neutral')
                         sentiment_score = item.get('sentiment_score', 0)
                         
-                        # Format sentiment display
+                        # Format sentiment display with colored text
                         if sentiment in ['positive', 'bullish']:
                             sentiment_emoji = '🟢'
-                            sentiment_color = 'positive'
+                            sentiment_color = 'green'
                         elif sentiment in ['negative', 'bearish']:
                             sentiment_emoji = '🔴'
-                            sentiment_color = 'negative'
+                            sentiment_color = 'red'
                         else:
                             sentiment_emoji = '⚪'
-                            sentiment_color = 'neutral'
+                            sentiment_color = 'gray'
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             # Make headline clickable if URL available
                             if url:
-                                st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
+                                st.markdown(f"[**{headline[:80]}**]({url}) <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
                             else:
-                                st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
-                            st.caption(f"📡 {source} | {sentiment_emoji} {sentiment.capitalize()}")
+                                st.markdown(f"**{headline[:80]}** <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
+                            st.caption(f"📡 {source} | <span style='color:{sentiment_color};'>{sentiment.capitalize()}</span>")
                         with col2:
                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
@@ -1661,18 +1785,18 @@ if st.session_state.trading_data.get('current_symbol'):
                                 url = item.get('url', '')
                                 sentiment = item.get('sentiment', 'neutral')
                                 
-                                # Format sentiment display
+                                # Format sentiment display with colored text
                                 if sentiment in ['positive', 'bullish']:
-                                    sentiment_emoji = '🟢'
+                                    sentiment_color = 'green'
                                 elif sentiment in ['negative', 'bearish']:
-                                    sentiment_emoji = '🔴'
+                                    sentiment_color = 'red'
                                 else:
-                                    sentiment_emoji = '⚪'
+                                    sentiment_color = 'gray'
                                 
                                 if url:
-                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
+                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
                                 else:
-                                    st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
+                                    st.markdown(f"• {headline[:60]}... - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
