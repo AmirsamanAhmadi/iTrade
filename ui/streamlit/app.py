@@ -1279,21 +1279,16 @@ if st.session_state.trading_data.get('current_symbol'):
         
         with st.button("📰 Refresh News", type="secondary"):
             with st.spinner("Fetching news for current symbol..."):
-                try:
-                    # Focus on current symbol + related symbols
-                    filter_symbols = [current_symbol] + ["AAPL", "GOOGL", "MSFT", "BTC-USD"][:4]
-                    headlines = news_service.fetch_headlines(tickers=filter_symbols)
-                    if headlines:
-                        st.success(f"📰 {len(headlines)} headlines fetched")
-                    else:
-                        st.info("📰 Using cached data")
-                except Exception as e:
-                    st.warning(f"News error: {e}")
-        
+                # Focus on current symbol + related symbols
+                filter_symbols = [current_symbol] + ["AAPL", "GOOGL", "MSFT", "BTC-USD"][:4]
+                headlines = news_service.fetch_headlines(tickers=filter_symbols)
+                if headlines:
+                    st.success(f"📰 {len(headlines)} headlines fetched")
+
         # Display symbol-specific news
         try:
             from services.news_service import NEWS_DB
-            news_items = _load_recent_news(NEWS_DB, days=3, limit=20)
+            news_items = _load_recent_news(NEWS_DB, days=3, limit=10)
             
             if news_items:
                 # Filter for current symbol
@@ -1318,11 +1313,4 @@ if st.session_state.trading_data.get('current_symbol'):
                     st.info(f"No recent news for {current_symbol}")
             else:
                 st.warning("No news data available")
-                
-        except Exception as e:
-            st.error(f"News display error: {e}")
-    
-
-
-st.write("---")
 st.write("🎯 **Dashboard Ready** | Start adding symbols from the sidebar to begin your analysis!")
