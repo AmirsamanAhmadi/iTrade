@@ -772,6 +772,11 @@ if mds:
                         st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
                         distance_to_liq = ((liquidation_price - entry_price) / entry_price) * 100
                         st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
+                    st.write(f"• **Position Size**: ${position_size:.2f}")
+                    if liquidation_price:
+                        st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                        distance_to_liq = ((liquidation_price - entry_price) / entry_price) * 100
+                        st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
                                     
                                 elif analysis.get('signal', {}).get('action') == 'SELL':
                                     entry_price = current_price * (1 + 0.002)  # Slightly above current
@@ -793,6 +798,11 @@ if mds:
                                 st.write(f"• **Exit Price**: ${entry_price:.5f}")
                                 st.write(f"• **Stop Loss**: ${tp_price:.5f}")
                                 st.write(f"• **Take Profit**: ${sl_price:.5f}")
+                                st.write(f"• **Position Size**: ${position_size:.2f}")
+                                if liquidation_price:
+                                    st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                                    distance_to_liq = ((entry_price - liquidation_price) / entry_price) * 100
+                                    st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
                                 st.write(f"• **Position Size**: ${position_size:.2f}")
                                 if liquidation_price:
                                     st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
