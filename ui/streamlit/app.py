@@ -1776,11 +1776,11 @@ if st.session_state.trading_data.get('current_symbol'):
                     st.write("#### 📰 Symbol News")
                     
                     # Show up to 10 items with an expander for more
-                    display_count = min(10, len(symbol_news))
-                    for i, item in enumerate(symbol_news[:display_count]):
-                        headline = item.get('headline', 'No headline')
-                        source = item.get('source', 'Unknown')
-                        timestamp = item.get('timestamp', '')
+                     display_count = min(10, len(symbol_news))
+                     for i, item in enumerate(symbol_news[:display_count]):
+                         headline = item.get('headline', 'No headline')
+                         source = item.get('source', 'Unknown')
+                         timestamp = item.get('timestamp', '')
                          url = item.get('url', '')
                          sentiment = item.get('sentiment', 'neutral')
                          sentiment_score = item.get('sentiment_score', 0)
@@ -1803,28 +1803,28 @@ if st.session_state.trading_data.get('current_symbol'):
                              st.caption(f"📡 {source}")
                          with col2:
                              st.caption(timestamp[:16] if timestamp else 'N/A')
-                    
-                    # Show more in expander if there are more items
-                    if len(symbol_news) > display_count:
-                        with st.expander(f"📰 Show {len(symbol_news) - display_count} more news items"):
-                            for item in symbol_news[display_count:]:
-                                headline = item.get('headline', 'No headline')
-                                source = item.get('source', 'Unknown')
-                                url = item.get('url', '')
-                                sentiment = item.get('sentiment', 'neutral')
-                                
-                             # Format sentiment display with emojis only
-                             if sentiment in ['positive', 'bullish']:
-                                 sentiment_emoji = '🟢'
-                             elif sentiment in ['negative', 'bearish']:
-                                 sentiment_emoji = '🔴'
-                             else:
-                                 sentiment_emoji = '⚪'
-                             
-                             if url:
-                                 st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
-                             else:
-                                 st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
+                     
+                     # Show more in expander if there are more items
+                     if len(symbol_news) > display_count:
+                         with st.expander(f"📰 Show {len(symbol_news) - display_count} more news items"):
+                             for item in symbol_news[display_count:]:
+                                 headline = item.get('headline', 'No headline')
+                                 source = item.get('source', 'Unknown')
+                                 url = item.get('url', '')
+                                 sentiment = item.get('sentiment', 'neutral')
+                                 
+                                 # Format sentiment display with emojis only
+                                 if sentiment in ['positive', 'bullish']:
+                                     sentiment_emoji = '🟢'
+                                 elif sentiment in ['negative', 'bearish']:
+                                     sentiment_emoji = '🔴'
+                                 else:
+                                     sentiment_emoji = '⚪'
+                                 
+                                 if url:
+                                     st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
+                                 else:
+                                     st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
