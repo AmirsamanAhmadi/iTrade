@@ -10,3 +10,4 @@ logs/
 
 # Env
 .env
+.DS_Store

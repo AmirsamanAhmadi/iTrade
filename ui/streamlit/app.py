@@ -37,8 +37,8 @@ UI_STATE_PATH = "db/ui_state.json"
 
 DEFAULT_CONFIG = {
     "market_symbols": [
-        "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "NVDA", "META", "NFLX", 
-        "BTC-USD", "ETH-USD", "XAUUSD=X", "GC=F", "EURUSD=X", "GBPUSD=X", 
+        "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "NVDA", "META", "NFLX",
+        "BTC-USD", "ETH-USD", "GC=F", "EURUSD=X", "GBPUSD=X",
         "SPY", "QQQ", "IWM", "DIA"
     ],
     "default_symbol": "AAPL",
@@ -400,7 +400,7 @@ def find_matching_pairs(selected_symbol, all_symbols):
     """Find potential matching pairs based on sector/category"""
     tech_stocks = ["AAPL", "GOOGL", "MSFT", "META", "NVDA", "NFLX", "TSLA"]
     crypto = ["BTC-USD", "ETH-USD"]
-    commodities = ["XAUUSD=X", "GC=F"]
+    commodities = ["GC=F"]
     forex = ["EURUSD=X", "GBPUSD=X"]
     etfs = ["SPY", "QQQ", "IWM", "DIA"]
     
@@ -1587,8 +1587,7 @@ if st.session_state.trading_data.get('current_symbol'):
                     # Comprehensive symbol to keywords mapping
                     keyword_map = {
                         # Commodities
-                        'GC=F': ['gold', 'precious metal', 'bullion', 'commodity'],
-                        'XAUUSD=X': ['gold', 'xau', 'precious metal', 'bullion'],
+                        'GC=F': ['gold', 'xau', 'precious metal', 'bullion', 'commodity'],
                         'SI=F': ['silver', 'precious metal', 'commodity'],
                         'CL=F': ['oil', 'crude', 'petroleum', 'commodity', 'energy'],
                         'NG=F': ['natural gas', 'gas', 'energy', 'commodity'],
@@ -1702,15 +1701,28 @@ if st.session_state.trading_data.get('current_symbol'):
                         source = item.get('source', 'Unknown')
                         timestamp = item.get('timestamp', '')
                         url = item.get('url', '')
+                        sentiment = item.get('sentiment', 'neutral')
+                        sentiment_score = item.get('sentiment_score', 0)
+                        
+                        # Format sentiment display
+                        if sentiment in ['positive', 'bullish']:
+                            sentiment_emoji = '🟢'
+                            sentiment_color = 'positive'
+                        elif sentiment in ['negative', 'bearish']:
+                            sentiment_emoji = '🔴'
+                            sentiment_color = 'negative'
+                        else:
+                            sentiment_emoji = '⚪'
+                            sentiment_color = 'neutral'
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             # Make headline clickable if URL available
                             if url:
-                                st.write(f"**[{headline[:80]}]({url})**")
+                                st.markdown(f"**[{headline[:80]}]({url})** {sentiment_emoji}")
                             else:
-                                st.write("**" + f"{headline[:80]}" + "**")
-                            st.caption(f"📡 {source}")
+                                st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
+                            st.caption(f"📡 {source} | {sentiment_emoji} {sentiment.capitalize()}")
                         with col2:
                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
@@ -1721,10 +1733,20 @@ if st.session_state.trading_data.get('current_symbol'):
                                 headline = item.get('headline', 'No headline')
                                 source = item.get('source', 'Unknown')
                                 url = item.get('url', '')
-                                if url:
-                                    st.write(f"• [{headline[:60]}...]({url}) - *{source}*")
+                                sentiment = item.get('sentiment', 'neutral')
+                                
+                                # Format sentiment display
+                                if sentiment in ['positive', 'bullish']:
+                                    sentiment_emoji = '🟢'
+                                elif sentiment in ['negative', 'bearish']:
+                                    sentiment_emoji = '🔴'
                                 else:
-                                    st.write(f"• {headline[:60]}... - *{source}*")
+                                    sentiment_emoji = '⚪'
+                                
+                                if url:
+                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
+                                else:
+                                    st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
