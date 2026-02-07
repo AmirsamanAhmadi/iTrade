@@ -411,6 +411,10 @@ def find_matching_pairs(selected_symbol, all_symbols):
 # ------------------------
 # Live Trading Dashboard
 # ------------------------
+
+# Shared data store for all sections
+if 'trading_data' not in st.session_state:
+    st.session_state.trading_data = {}
 st.write("---")
 st.write("### 🎯 Trading Dashboard & Position Suggestions")
 mds = None
@@ -489,7 +493,7 @@ if mds:
                         st.info("📊 Using market data service data")
                 
                 if df is not None and not df.empty:
-                    # Store analysis for persistence
+                    # Store analysis for persistence and connect to other sections
                     st.session_state.last_analysis = {
                         'symbol': symbol,
                         'df': df,
@@ -499,6 +503,14 @@ if mds:
                         'take_profit_pct': take_profit_pct,
                         'timestamp': datetime.utcnow().isoformat()
                     }
+                    
+                    # Update shared trading data
+                    st.session_state.trading_data.update({
+                        'current_symbol': symbol,
+                        'current_price': latest_price,
+                        'last_analysis': st.session_state.last_analysis,
+                        'analysis_time': datetime.utcnow().isoformat()
+                    })
                     
                     # Generate trading signals and suggestions
                     current_price = df['Close'].iloc[-1]
@@ -760,6 +772,114 @@ if mds:
                         st.warning(f"Chart error: {e}")
                         st.line_chart(df[['Close', 'MA20', 'MA50']])
 
+                    # Additional technical charts and indicators
+                    st.write("#### 📊 Advanced Technical Indicators")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        # RSI Chart
+                        st.write("**RSI Analysis**")
+                        rsi_df = df[['RSI']].copy().dropna()
+                        if not rsi_df.empty:
+                            rsi_df = rsi_df.reset_index()
+                            time_col = rsi_df.columns[0]
+                            rsi_df = rsi_df.rename(columns={time_col: 'time'})
+                            
+                            # Add overbought/oversold zones
+                            rsi_chart_data = rsi_df.melt('time', var_name='indicator', value_name='value')
+                            
+                            try:
+                                import altair as alt
+                                rsi_chart = alt.Chart(rsi_df).mark_line(color='purple', strokeWidth=2).encode(
+                                    x=alt.X('time:T', title='Time'),
+                                    y=alt.Y('RSI:Q', title='RSI', scale=alt.Scale(domain=[0, 100])),
+                                    tooltip=[alt.Tooltip('time:T', title='Time'), alt.Tooltip('RSI:Q', title='RSI', format='.1f')]
+                                ).properties(height=250, width='container')
+                                
+                                # Add zones
+                                overbought_zone = alt.Chart(pd.DataFrame([
+                                    {'start': df.index[0], 'end': df.index[-1], 'zone': 70, 'label': 'Overbought'},
+                                    {'start': df.index[0], 'end': df.index[-1], 'zone': 30, 'label': 'Oversold'}
+                                ])).mark_area(opacity=0.1, color='red').encode(
+                                    x=alt.X('start:T'), x2=alt.X2('end:T'), y=alt.Y('zone:Q'), y2=alt.Y2('zone:Q')
+                                )
+                                
+                                rsi_final_chart = (rsi_chart + overbought_zone).interactive()
+                                st.altair_chart(rsi_final_chart, use_container_width=True)
+                                
+                            except Exception:
+                                st.line_chart(rsi_df.set_index('time')[['RSI']])
+                        
+                        st.metric("Current RSI", f"{latest_rsi:.1f}", 
+                                delta="Overbought" if latest_rsi > 70 else "Oversold" if latest_rsi < 30 else "Neutral")
+                    
+                    with col2:
+                        # Volume Analysis
+                        st.write("**Volume Analysis**")
+                        if 'Volume' in df.columns:
+                            volume_df = df[['Volume']].tail(20).copy()
+                            volume_df['Volume_MA'] = volume_df['Volume'].rolling(window=10).mean()
+                            
+                            try:
+                                import altair as alt
+                                volume_viz = volume_df.reset_index()
+                                time_col = volume_viz.columns[0]
+                                volume_viz = volume_viz.rename(columns={time_col: 'time'})
+                                
+                                volume_chart = alt.Chart(volume_viz).mark_bar(opacity=0.7, color='orange').encode(
+                                    x=alt.X('time:T', title='Time'),
+                                    y=alt.Y('Volume:Q', title='Volume'),
+                                    tooltip=[alt.Tooltip('time:T', title='Time'), alt.Tooltip('Volume:Q', title='Volume', format=',.0f')]
+                                ).properties(height=250, width='container')
+                                
+                                volume_ma = alt.Chart(volume_viz).mark_line(color='red', strokeWidth=2).encode(
+                                    x='time:T', y='Volume_MA:Q'
+                                )
+                                
+                                volume_final_chart = (volume_chart + volume_ma).interactive()
+                                st.altair_chart(volume_final_chart, use_container_width=True)
+                                
+                            except Exception:
+                                st.bar_chart(volume_df.set_index('time')[['Volume']])
+                        
+                        if 'Volume' in df.columns:
+                            current_volume = df['Volume'].iloc[-1]
+                            avg_volume = df['Volume'].tail(20).mean()
+                            st.metric("Current Volume", f"{current_volume:,.0f}")
+                            st.metric("Volume vs Avg", f"{((current_volume/avg_volume - 1)*100):+.1f}%")
+                    
+                    # Price statistics and correlations
+                    st.write("#### 📈 Price Statistics & Volatility")
+                    
+                    stat_col1, stat_col2, stat_col3 = st.columns(3)
+                    with stat_col1:
+                        # Price statistics
+                        high_20d = df['High'].tail(20).max()
+                        low_20d = df['Low'].tail(20).min()
+                        volatility = df['Close'].pct_change().tail(20).std() * 100
+                        
+                        st.metric("20D High", f"${high_20d:.4f}")
+                        st.metric("20D Low", f"${low_20d:.4f}")
+                        st.metric("Volatility", f"{volatility:.2f}%")
+                    
+                    with stat_col2:
+                        # Support/Resistance levels
+                        recent_high = df['High'].tail(10).max()
+                        recent_low = df['Low'].tail(10).min()
+                        
+                        st.metric("Resistance", f"${recent_high:.4f}")
+                        st.metric("Support", f"${recent_low:.4f}")
+                        st.metric("Range Width", f"${(recent_high - recent_low):.4f}")
+                    
+                    with stat_col3:
+                        # Trend indicators
+                        ma_trend = "UP" if latest_price > df['MA50'].iloc[-1] else "DOWN"
+                        ma_strength = abs((latest_price / df['MA50'].iloc[-1] - 1) * 100)
+                        
+                        st.metric("Trend", ma_trend)
+                        st.metric("Trend Strength", f"{ma_strength:.1f}%")
+                        st.metric("Price vs MA50", f"{((latest_price / df['MA50'].iloc[-1] - 1) * 100):+.2f}%")
+
                     # Recent price data
                     st.write("#### 📋 Recent Price Action")
                     display_df = df.tail(10).copy()
@@ -770,6 +890,108 @@ if mds:
             except Exception as e:
                 st.error(f"❌ Failed to analyze {symbol}: {e}")
 
+# Connected Analysis Summary
+st.write("---")
+st.write("### 🔗 Connected Trading Analysis")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.subheader("📊 Current Analysis")
+    if st.session_state.trading_data.get('current_symbol'):
+        st.write(f"**Symbol**: {st.session_state.trading_data['current_symbol']}")
+        st.write(f"**Price**: ${st.session_state.trading_data.get('current_price', 0):.5f}")
+        st.write(f"**Updated**: {st.session_state.trading_data.get('analysis_time', 'N/A')}")
+        
+        if st.session_state.trading_data.get('last_analysis'):
+            last_analysis = st.session_state.trading_data['last_analysis']
+            st.write(f"**Signal**: {last_analysis.get('signal', {}).get('action', 'N/A')}")
+            st.write(f"**Account**: ${last_analysis.get('account_balance', 0):,.2f}")
+    else:
+        st.info("Select a symbol and click 'Analyze & Get Signals' to begin")
+
+with col2:
+    st.subheader("📰 News Connection")
+    current_sym = st.session_state.trading_data.get('current_symbol', '')
+    if current_sym:
+        # Show news count for current symbol
+        try:
+            from services.news_service import NEWS_DB
+            news_items = _load_recent_news(NEWS_DB, days=3, limit=100)
+            if news_items:
+                symbol_news = [item for item in news_items if current_sym.lower() in item.get('headline', '').lower()]
+                st.write(f"**Symbol News**: {len(symbol_news)} articles")
+                st.write(f"**Total News**: {len(news_items)} articles")
+                
+                # Show latest relevant headline
+                if symbol_news:
+                    latest = symbol_news[0]
+                    st.write(f"**Latest**: {latest.get('headline', 'N/A')[:50]}...")
+                    st.write(f"**Source**: {latest.get('source', 'N/A')}")
+                else:
+                    st.info("No recent news for current symbol")
+            else:
+                st.warning("No news data available")
+        except Exception as e:
+            st.error(f"News connection error: {e}")
+    else:
+        st.info("Analyze a symbol to see connected news")
+
+with col3:
+    st.subheader("🧪 Backtesting Link")
+    backtest_symbol = st.session_state.trading_data.get('backtest_symbol')
+    if backtest_symbol and st.session_state.trading_data.get('backtest_results'):
+        results = st.session_state.trading_data['backtest_results']
+        st.write(f"**Tested Symbol**: {backtest_symbol}")
+        st.write(f"**Final Balance**: ${results.get('final_balance', 0):,.2f}")
+        st.write(f"**Win Rate**: {results.get('win_rate', 0):.1f}%")
+        st.write(f"**Total Trades**: {results.get('total_trades', 0)}")
+        
+        if results.get('total_return'):
+            st.write(f"**Return**: {results['total_return']:.2f}%")
+    elif backtest_symbol:
+        st.info("Backtest in progress...")
+    else:
+        st.info("Run backtest to see results connected to current analysis")
+
+# Add correlation display
+st.write("#### 🔗 Data Flow Status")
+flow_col1, flow_col2 = st.columns(2)
+
+with flow_col1:
+    if st.session_state.trading_data.get('current_symbol'):
+        st.success("✅ Main Chart: Connected")
+    else:
+        st.warning("⚠️ Main Chart: No symbol selected")
+        
+    if st.session_state.trading_data.get('last_analysis'):
+        st.success("✅ Analysis: Connected to Main Chart")
+    else:
+        st.warning("⚠️ Analysis: Run 'Analyze & Get Signals'")
+        
+    news_connected = st.session_state.trading_data.get('current_symbol') is not None
+    if news_connected:
+        st.success("✅ News: Connected to Current Symbol")
+    else:
+        st.warning("⚠️ News: Select symbol for connection")
+
+with flow_col2:
+    backtest_connected = st.session_state.trading_data.get('backtest_results') is not None
+    if backtest_connected:
+        st.success("✅ Backtesting: Connected")
+    else:
+        st.warning("⚠️ Backtesting: Run backtest to connect")
+        
+    # Show if all systems are connected
+    all_connected = (st.session_state.trading_data.get('current_symbol') is not None and 
+                   st.session_state.trading_data.get('last_analysis') is not None and
+                   backtest_connected)
+    
+    if all_connected:
+        st.success("🎯 All Systems Connected - Complete Trading Analysis Available!")
+    else:
+        st.info("🔗 Connect all systems for full analysis")
+
 
 
 # ------------------------
@@ -778,11 +1000,20 @@ if mds:
 st.write("---")
 st.write("### 🧪 Strategy Backtesting")
 
-# Backtesting configuration
+# Backtesting configuration - connected to main trading data
 with st.expander("⚙️ Backtest Configuration", expanded=False):
     col1, col2 = st.columns(2)
     with col1:
-        backtest_symbol = st.selectbox("Backtest Symbol", all_symbols, index=0)
+        # Use current symbol from main trading if available
+        current_trade_symbol = st.session_state.trading_data.get('current_symbol', '')
+        if current_trade_symbol and current_trade_symbol in all_symbols:
+            default_backtest_symbol = current_trade_symbol
+            default_index = all_symbols.index(current_trade_symbol)
+        else:
+            default_backtest_symbol = all_symbols[0] if all_symbols else "AAPL"
+            default_index = 0
+            
+        backtest_symbol = st.selectbox("Backtest Symbol", all_symbols, index=default_index)
         backtest_days = st.number_input("Backtest Period (days)", min_value=7, max_value=365, value=30)
         initial_balance = st.number_input("Initial Balance", min_value=1000, max_value=1000000, value=10000)
         
@@ -829,6 +1060,9 @@ with st.expander("⚙️ Backtest Configuration", expanded=False):
 
 if st.button("🚀 Run Backtest", type="primary"):
     if mds:
+        # Store current backtest symbol for other sections
+        st.session_state.trading_data['backtest_symbol'] = backtest_symbol
+        st.session_state.trading_data['backtest_results'] = None
         with st.spinner(f"Running backtest for {backtest_symbol}..."):
             try:
                 # Fetch historical data
@@ -1126,14 +1360,22 @@ try:
     from services.news_service import NewsService
     news_service = NewsService()
     
+    # Get current trading symbol from shared data
+    current_symbol = st.session_state.trading_data.get('current_symbol', '')
+    current_price = st.session_state.trading_data.get('current_price', 0)
+    
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
         if st.button("📰 Refresh News", type="secondary"):
             with st.spinner("Fetching latest market news..."):
                 try:
-                    # Try to get recent headlines for major symbols
-                    major_symbols = ["AAPL", "GOOGL", "MSFT", "BTC-USD", "XAUUSD=X"][:5]  # Limit to avoid rate limits
-                    headlines = news_service.fetch_headlines(tickers=major_symbols)
+                    # Filter news for current trading symbol
+                    if current_symbol:
+                        filter_symbols = [current_symbol] + ["AAPL", "GOOGL", "MSFT", "BTC-USD"][:4]  # Include current symbol + top symbols
+                    else:
+                        filter_symbols = ["AAPL", "GOOGL", "MSFT", "BTC-USD", "XAUUSD=X"][:5]
+                    
+                    headlines = news_service.fetch_headlines(tickers=filter_symbols)
                     if headlines:
                         st.success(f"📰 Fetched {len(headlines)} latest headlines")
                     else:
