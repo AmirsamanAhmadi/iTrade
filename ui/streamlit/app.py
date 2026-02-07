@@ -865,9 +865,9 @@ if mds:
                             })
                             st.line_chart(bb_normalized, use_container_width=True)
                             st.caption("📊 % deviation from middle band (±2 std dev)")
-                        
-                         # RSI Chart and Price Change Distribution side by side
-                         rsi_col, change_col = st.columns(2)
+                    
+                    # RSI Chart and Price Change Distribution side by side
+                    rsi_col, change_col = st.columns(2)
                          
                          with rsi_col:
                              st.write("**📈 RSI**")
