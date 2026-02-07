@@ -1,45 +1,145 @@
 # News API Configuration
 
-This trading dashboard now supports multiple news sources for comprehensive market coverage.
+This trading dashboard now supports **14+ news sources** for comprehensive market coverage.
 
-## Supported News Sources
+## 🚀 MASSIVE NEWS API (Primary)
 
-### 1. **Finviz** (Default - No API Key Required)
-- Market news and headlines
-- Automatically enabled if `finvizfinance` package is installed
+### **Massive Finance News API** (Recommended)
+- Professional financial news aggregator
+- **Requires API Key**
+- Real-time market news
+- Sentiment analysis included
+- Get key at: https://massive.com/landing/finance-news-api
 
-### 2. **NewsAPI** (newsapi.org)
+## 📰 PREMIUM NEWS APIs
+
+### 1. **NewsAPI** (newsapi.org)
 - General news with financial focus
 - **Requires API Key**
 - Free tier: 100 requests/day
 - Get key at: https://newsapi.org/register
 
-### 3. **Alpha Vantage** (alphavantage.co)
+### 2. **Alpha Vantage** (alphavantage.co)
 - Financial news with sentiment analysis
 - **Requires API Key**
 - Free tier: 25 requests/day
 - Get key at: https://www.alphavantage.co/support/#api-key
 
-### 4. **MarketWatch** (Dow Jones)
-- RSS feed for top market stories
-- No API key required
-- Automatically enabled
+### 3. **GNews** (gnews.io)
+- Global news aggregator
+- **Requires API Key**
+- Free tier: 100 requests/day
+- Get key at: https://gnews.io/
 
-## Setup Instructions
+### 4. **Currents API** (currentsapi.services)
+- Real-time news API
+- **Requires API Key**
+- Get key at: https://currentsapi.services/
+
+### 5. **New York Times API**
+- Business and finance section
+- **Requires API Key**
+- Free tier available
+- Get key at: https://developer.nytimes.com/
+
+### 6. **The Guardian API**
+- Business news
+- **Requires API Key**
+- Free tier: 12 requests/day
+- Get key at: https://open-platform.theguardian.com/
+
+### 7. **Benzinga API**
+- Financial news specialist
+- **Requires API Key**
+- Professional-grade financial news
+- Get key at: https://www.benzinga.com/apis
+
+## 📡 RSS FEEDS (No API Key Required)
+
+### 8. **Finviz** (Default)
+- Market news and headlines
+- Automatically enabled if `finvizfinance` package installed
+
+### 9. **MarketWatch** (Dow Jones)
+- Top market stories RSS feed
+- No API key required
+
+### 10. **Yahoo Finance**
+- Market news feeds
+- No API key required
+- Requires: `pip install feedparser`
+
+### 11. **Investing.com**
+- Global financial news RSS
+- No API key required
+- Requires: `pip install feedparser`
+
+## 💬 SOCIAL/COMMUNITY SOURCES
+
+### 12. **StockTwits**
+- Trader community ideas and sentiment
+- No API key required
+- Real-time trader discussions
+
+### 13. **Reddit**
+- r/wallstreetbets, r/investing, r/stocks, r/StockMarket
+- No API key required
+- Community sentiment and discussions
+
+## ⚙️ Setup Instructions
 
 ### Option 1: Environment Variables (Recommended)
 
-Add these to your `.env` file or export in your shell:
+Create a `.env` file in your project root:
 
 ```bash
-# NewsAPI (Get free key from newsapi.org)
-export NEWSAPI_KEY="your_newsapi_key_here"
+# MASSIVE Finance News API (Primary - Recommended)
+# Get key at: https://massive.com/landing/finance-news-api
+MASSIVE_KEY="your_massive_api_key_here"
 
-# Alpha Vantage (Get free key from alphavantage.co)
-export ALPHA_VANTAGE_KEY="your_alpha_vantage_key_here"
+# NewsAPI (newsapi.org) - 100 requests/day free
+# Get key at: https://newsapi.org/register
+NEWSAPI_KEY="your_newsapi_key_here"
+
+# Alpha Vantage (alphavantage.co) - 25 requests/day free
+# Get key at: https://www.alphavantage.co/support/#api-key
+ALPHA_VANTAGE_KEY="your_alpha_vantage_key_here"
+
+# GNews (gnews.io) - 100 requests/day free
+# Get key at: https://gnews.io/
+GNEWS_KEY="your_gnews_key_here"
+
+# Currents API (currentsapi.services)
+# Get key at: https://currentsapi.services/
+CURRENTS_KEY="your_currents_key_here"
+
+# New York Times API
+# Get key at: https://developer.nytimes.com/
+NYT_KEY="your_nyt_key_here"
+
+# The Guardian API - 12 requests/day free
+# Get key at: https://open-platform.theguardian.com/
+GUARDIAN_KEY="your_guardian_key_here"
+
+# Benzinga API
+# Get key at: https://www.benzinga.com/apis
+BENZINGA_KEY="your_benzinga_key_here"
 ```
 
-### Option 2: Direct in Code (Not Recommended for Production)
+### Option 2: Export in Shell
+
+```bash
+export MASSIVE_KEY="your_key_here"
+export NEWSAPI_KEY="your_key_here"
+export ALPHA_VANTAGE_KEY="your_key_here"
+export GNEWS_KEY="your_key_here"
+export CURRENTS_KEY="your_key_here"
+export NYT_KEY="your_key_here"
+export GUARDIAN_KEY="your_key_here"
+export BENZINGA_KEY="your_key_here"
+```
+
+### Option 3: Direct in Code (Not Recommended for Production)
 
 Edit `services/news_service.py`:
 
@@ -47,8 +147,14 @@ Edit `services/news_service.py`:
 @dataclass
 class NewsService:
     source: str = 'multi'
+    MASSIVE_KEY: Optional[str] = "your_key_here"
     NEWSAPI_KEY: Optional[str] = "your_key_here"
     ALPHA_VANTAGE_KEY: Optional[str] = "your_key_here"
+    GNEWS_KEY: Optional[str] = "your_key_here"
+    CURRENTS_KEY: Optional[str] = "your_key_here"
+    NYT_KEY: Optional[str] = "your_key_here"
+    GUARDIAN_KEY: Optional[str] = "your_key_here"
+    BENZINGA_KEY: Optional[str] = "your_key_here"
 ```
 
 ## Installing Additional Dependencies
