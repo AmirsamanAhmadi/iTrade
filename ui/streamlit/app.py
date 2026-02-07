@@ -24,7 +24,6 @@ import streamlit as st
 from services.news_signal import NewsSignalService
 from backend.backtesting.engine import BacktestEngine, BacktestConfig, SlippageModel
 from backend.risk.risk_manager import RiskEngine
-from services.mt5_service import MT5Service
 from services.tv_service import TradingViewService
 
 st.set_page_config(page_title="Market Data & Trading Dashboard", layout="wide")
@@ -72,8 +71,6 @@ if 'cfg' not in st.session_state:
     st.session_state.cfg = load_config()
 
 # Initialize Services
-if 'mt5_service' not in st.session_state:
-    st.session_state.mt5_service = MT5Service()
 if 'tv_service' not in st.session_state:
     st.session_state.tv_service = TradingViewService()
 
@@ -426,80 +423,17 @@ if 'trading_data' not in st.session_state:
     st.session_state.trading_data = {}
 st.write("---")
 st.write("### 🎯 Trading Dashboard & Position Suggestions")
-mds = None
-mt5_service = None
-try:
-    from services.market_data import MarketDataService
-    mds = MarketDataService()
-    mt5_service = st.session_state.mt5_service
-except Exception as e:
-    st.warning(f"Market data service not available: {e}")
-
-if mds:
-    # Combine default and user symbols
-    all_symbols = st.session_state.cfg.get("market_symbols", []) + st.session_state.cfg.get("user_symbols", [])
-    all_symbols = list(set(all_symbols))  # Remove duplicates
-    
-    col_a, col_b = st.columns([1, 3])
-    with col_a:
-        st.subheader("🔍 Trading Setup")
-        default_sym = st.session_state.cfg.get("default_symbol", "AAPL")
-        if default_sym not in all_symbols:
-            default_sym = all_symbols[0] if all_symbols else "AAPL"
-
-        symbol = st.selectbox("Select Trading Symbol", all_symbols, index=all_symbols.index(default_sym) if default_sym in all_symbols else 0)
-
-        intervals = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
-        default_int = st.session_state.cfg.get("market_interval", "1h")
-        interval = st.selectbox("Timeframe", intervals, index=intervals.index(default_int) if default_int in intervals else 4)
-
-        # Trading configuration
-        st.write("**⚙️ Trading Configuration**")
-        account_balance = st.number_input("Account Balance ($)", min_value=100, max_value=1000000, value=10000)
-        risk_per_trade = st.slider("Risk per Trade (%)", 0.5, 10.0, 2.0, 0.5)
-        stop_loss_pct = st.slider("Stop Loss (%)", 0.5, 10.0, 2.0, 0.5)
-        take_profit_pct = st.slider("Take Profit (%)", 1.0, 20.0, 5.0, 0.5)
-
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("📊 Analyze & Get Signals", type="primary"):
-                st.session_state.analyze_triggered = True
-        with c2:
-            if st.button("💾 Save Settings"):
-                st.session_state.cfg["default_symbol"] = symbol
-                st.session_state.cfg["market_interval"] = interval
-                st.session_state.cfg["account_balance"] = account_balance
-                st.session_state.cfg["risk_per_trade"] = risk_per_trade
-                _save_config()
-                st.success("Settings saved!")
-
-    with col_b:
-        st.write("#### 🎯 Trading Signals & Position Suggestion")
-        
-        if st.session_state.get('analyze_triggered', False) or 'last_analysis' in st.session_state:
-            try:
+    mds = None
+    try:
                 # Fetch data for analysis
                 end = datetime.utcnow().date().isoformat()
                 start = (datetime.utcnow().date() - pd.Timedelta(days=7)).isoformat()
                 
                 df = None
-                # Try MetaTrader 5 first for live data
-                if mt5_service and mt5_service.connected:
-                    try:
-                        mt5_data = mt5_service.get_symbol_data(symbol, interval, 100)
-                        if mt5_data:
-                            df = pd.DataFrame(mt5_data)
-                            df.index = pd.to_datetime(df['time'])
-                            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-                            st.success("📡 Using live MetaTrader 5 data!")
-                    except Exception as mt5_error:
-                        st.warning(f"MT5 data error: {mt5_error}, falling back to market data service")
-                
-                # Fallback to market data service
-                if df is None:
-                    df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
-                    if df is not None:
-                        st.info("📊 Using market data service data")
+                # Use market data service
+                df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                if df is not None:
+                    st.info("📊 Using market data service data")
                 
                 if df is not None and not df.empty:
                     # Store analysis for persistence and connect to other sections
@@ -616,24 +550,7 @@ if mds:
             except Exception as e:
                 st.error(f"❌ Analysis failed: {e}")
 
-# Real-time price display and trading chart
-    if mt5_service and mt5_service.connected:
-        st.write("#### 📡 Live Trading - MetaTrader 5")
-        
-        # Get live price from MT5
-        live_price_data = mt5_service.get_live_price(symbol)
-        if live_price_data:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("💰 Bid", f"${live_price_data['bid']:.5f}")
-            with col2:
-                st.metric("💸 Ask", f"${live_price_data['ask']:.5f}")
-            with col3:
-                st.metric("📊 Spread", f"{live_price_data['spread']:.5f}")
-            with col4:
-                st.metric("⏰ Last Update", live_price_data['time'].strftime('%H:%M:%S'))
-        else:
-            st.warning("📡 Live price data unavailable")
+    # Real-time price display and trading chart
     
     # Chart with current analysis
     analyze_triggered = st.session_state.get('analyze_triggered', False)
@@ -643,27 +560,11 @@ if mds:
                 end = datetime.utcnow().date().isoformat()
                 start = (datetime.utcnow().date() - pd.Timedelta(days=7)).isoformat()
                 
-                # Try MT5 first for live data
-                df = None
-                if mt5_service and mt5_service.connected:
-                    try:
-                        mt5_data = mt5_service.get_symbol_data(symbol, interval, 100)
-                        if mt5_data:
-                            df = pd.DataFrame(mt5_data)
-                            df.index = pd.to_datetime(df['time'])
-                            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-                            st.success("📡 Using live MetaTrader 5 data!")
-                    except Exception as mt5_error:
-                        st.warning(f"MT5 data error: {mt5_error}")
-                
-                # Fallback to market data service
-                if df is None:
-                    df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
-                    if df is not None:
-                        st.info("📊 Using market data service data")
+                # Use market data service
+                df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
                 
                 # Track data source for display
-                data_source = "MetaTrader 5" if (mt5_service and mt5_service.connected and df is not None) else "Market Data Service"
+                data_source = "Market Data Service"
                 
                 if df is not None and not df.empty:
                     # Calculate indicators
@@ -1207,15 +1108,15 @@ if st.button("🚀 Run Backtest", type="primary"):
                     # Generate trading signals based on strategy
                     signals = generate_trading_signals(df, strategy_type)
                     
-                    # Calculate returns
-                    returns = calculate_backtest_returns(df, signals, initial_balance, risk_per_trade/100)
-                    
-                        # Track backtest data source
-                    backtest_data_source = "MetaTrader 5" if (mt5_service and mt5_service.connected) else "Market Data Service (Yahoo Finance)"
-                    
-                    # Display results
-                    st.success("✅ Backtest completed!")
-                    st.caption(f"📡 Data Source: {backtest_data_source} | Symbol: {backtest_symbol} | Period: {backtest_days} days")
+                     # Calculate returns
+                     returns = calculate_backtest_returns(df, signals, initial_balance, risk_per_trade/100)
+                     
+                         # Track backtest data source
+                     backtest_data_source = "Market Data Service (Yahoo Finance)"
+                     
+                     # Display results
+                     st.success("✅ Backtest completed!")
+                     st.caption(f"📡 Data Source: {backtest_data_source} | Symbol: {backtest_symbol} | Period: {backtest_days} days")
                     
                     # Performance metrics
                     col1, col2, col3, col4 = st.columns(4)

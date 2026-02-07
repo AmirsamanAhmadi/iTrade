@@ -14,8 +14,6 @@ finvizfinance
 
 # News Service Optional Dependencies
 # For MarketWatch RSS support:
-# feedparser>=6.0.0
-
-# News Service already uses:
-# requests>=2.28.0 (already in requirements)
-python-dotenv>=1.0.0  # For loading .env files
+feedparser>=6.0.0
+requests>=2.28.0
+python-dotenv>=1.0.0
