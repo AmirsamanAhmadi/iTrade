@@ -3,6 +3,15 @@ from datetime import datetime
 import os, sys
 from pathlib import Path
 
+# Load environment variables from .env file at startup
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parents[2] / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass
+
 # Ensure project root is on sys.path so `services` and `backend` imports work when
 # Streamlit runs the app from a different working directory.
 ROOT = Path(__file__).resolve().parents[2]

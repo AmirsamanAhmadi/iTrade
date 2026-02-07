@@ -20,6 +20,13 @@ from typing import List, Dict, Optional
 import requests
 import time
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 # Try to import optional dependencies
