@@ -1772,10 +1772,10 @@ if st.session_state.trading_data.get('current_symbol'):
                 st.write(f"**📊 Found {len(symbol_news)} news items for {current_symbol}**")
                 st.caption(f"🔍 Filter: {filter_type}{url_filter}")
                 
-                if symbol_news:
-                    st.write("#### 📰 Symbol News")
-                    
-                    # Show up to 10 items with an expander for more
+                 if symbol_news:
+                     st.write("#### 📰 Symbol News")
+                     
+                     # Show up to 10 items with an expander for more
                      display_count = min(10, len(symbol_news))
                      for i, item in enumerate(symbol_news[:display_count]):
                          headline = item.get('headline', 'No headline')
