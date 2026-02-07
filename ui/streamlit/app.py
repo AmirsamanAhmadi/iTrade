@@ -669,12 +669,15 @@ if mds:
                     st.write("#### 📈 Price Chart with Entry/Exit Levels")
                     st.caption(f"📡 Data Source: {data_source} | Interval: {interval}")
                     
-                    try:
+                     try:
                         import altair as alt
                         df_viz = df.reset_index()
                         time_col = df_viz.columns[0]
                         df_viz = df_viz.rename(columns={time_col: 'time'})
-
+ 
+                        # Prepare data for candlestick chart
+                        df_viz['Open_Close_Mid'] = (df_viz['Open'] + df_viz['Close']) / 2
+                        
                         # Base chart
                         base = alt.Chart(df_viz).encode(
                             x=alt.X('time:T', title='Time'),
@@ -683,15 +686,37 @@ if mds:
                                 alt.Tooltip('Close:Q', title='Price', format='$,.5f')
                             ]
                         ).properties(height=400, width='container')
-
-                        price_line = base.mark_line(color='blue', strokeWidth=2).encode(
+ 
+                        # Candlestick bars
+                        candles = base.mark_bar(opacity=0.8).encode(
+                            y=alt.Y('Open_Close_Mid:Q', title='Price'),
+                            y2='Close:Q',
+                            color=alt.condition(
+                                alt.datum('Close:Q') > alt.datum('Open:Q'),
+                                alt.value('green'),  # Bullish candles
+                                alt.value('red')     # Bearish candles
+                            )
+                        )
+                        
+                        # Candle wicks
+                        wicks_upper = base.mark_rule(stroke='currentColor', strokeWidth=1).encode(
+                            y='High:Q',
+                            y2='Open_Close_Mid:Q'
+                        )
+                        wicks_lower = base.mark_rule(stroke='currentColor', strokeWidth=1).encode(
+                            y='Close:Q',
+                            y2='Low:Q'
+                        )
+                        
+                        # Moving averages
+                        price_line = base.mark_line(color='blue', strokeWidth=1, opacity=0.3).encode(
                             y=alt.Y('Close:Q', title=f'Price ({symbol})', scale=alt.Scale(zero=False))
                         )
-
-                        ma20_line = base.mark_line(strokeDash=[5, 5], color='orange').encode(y='MA20:Q')
-                        ma50_line = base.mark_line(strokeDash=[3, 3], color='green').encode(y='MA50:Q')
-
-                        chart_layers = [price_line, ma20_line, ma50_line]
+ 
+                        ma20_line = base.mark_line(strokeDash=[5, 5], color='orange', strokeWidth=2).encode(y='MA20:Q')
+                        ma50_line = base.mark_line(strokeDash=[3, 3], color='green', strokeWidth=2).encode(y='MA50:Q')
+ 
+                        chart_layers = [candles, wicks_upper, wicks_lower, price_line, ma20_line, ma50_line]
 
                         # Add entry/exit suggestions based on current analysis
                         if 'last_analysis' in st.session_state:
@@ -841,11 +866,55 @@ if mds:
                             st.line_chart(bb_normalized, use_container_width=True)
                             st.caption("📊 % deviation from middle band (±2 std dev)")
                         
-                        # RSI Chart
-                        rsi_df = df[['RSI']].copy().dropna()
-                        if not rsi_df.empty:
-                            st.write("**📊 RSI**")
-                            st.line_chart(rsi_df.tail(50), use_container_width=True)
+                         # RSI Chart and Price Change Distribution side by side
+                         rsi_col, change_col = st.columns(2)
+                         
+                         with rsi_col:
+                             st.write("**📈 RSI**")
+                             rsi_df = df[['RSI']].copy().dropna()
+                             if not rsi_df.empty:
+                                 st.line_chart(rsi_df.tail(50), use_container_width=True)
+                         
+                         with change_col:
+                             st.write("**📊 Price Change Distribution (Multi-Timeframe)**")
+                             
+                             try:
+                                 import altair as alt
+                                 
+                                 # Calculate price changes for different periods
+                                 periods = [1, 5, 10, 20]  # days
+                                 price_changes = []
+                                 
+                                 for period in periods:
+                                     if len(df) > period:
+                                         change_pct = ((df['Close'].iloc[-1] - df['Close'].iloc[-period]) / df['Close'].iloc[-period]) * 100
+                                         price_changes.append({
+                                             'period': f'{period}D',
+                                             'change': change_pct,
+                                             'color': 'green' if change_pct > 0 else 'red'
+                                         })
+                                 
+                                 if price_changes:
+                                     change_df = pd.DataFrame(price_changes)
+                                     
+                                     # Create bar chart
+                                     base = alt.Chart(change_df).encode(
+                                         x=alt.X('period:N', title='Period'),
+                                         y=alt.Y('change:Q', title='Change %'),
+                                         color=alt.Color('color:N', legend=None)
+                                     ).properties(height=200, width='container')
+                                      
+                                     bar_chart = base.mark_bar(size=40)
+                                      
+                                     # Add horizontal line at 0
+                                     rule = alt.Chart(pd.DataFrame({'x': ['0%']})).mark_rule(
+                                         color='gray', strokeDash=[2, 2], strokeWidth=1
+                                     ).encode(x='x')
+                                      
+                                     st.altair_chart(bar_chart + rule, use_container_width=True)
+                                      
+                             except Exception as e:
+                                 st.warning(f"Price distribution chart error: {e}")
                     
                     with chart_col2:
                         st.write("**📉 MACD & Volume**")
@@ -1754,25 +1823,23 @@ if st.session_state.trading_data.get('current_symbol'):
                         sentiment = item.get('sentiment', 'neutral')
                         sentiment_score = item.get('sentiment_score', 0)
                         
-                        # Format sentiment display with colored text
-                        if sentiment in ['positive', 'bullish']:
+                        # Format sentiment display with emojis (Streamlit doesn't support HTML colors)
+                        sentiment_lower = sentiment.lower()
+                        if 'positive' in sentiment_lower or 'bullish' in sentiment_lower or 'somewhat-bullish' in sentiment_lower:
                             sentiment_emoji = '🟢'
-                            sentiment_color = 'green'
-                        elif sentiment in ['negative', 'bearish']:
+                        elif 'negative' in sentiment_lower or 'bearish' in sentiment_lower or 'somewhat-bearish' in sentiment_lower:
                             sentiment_emoji = '🔴'
-                            sentiment_color = 'red'
                         else:
                             sentiment_emoji = '⚪'
-                            sentiment_color = 'gray'
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             # Make headline clickable if URL available
                             if url:
-                                st.markdown(f"[**{headline[:80]}**]({url}) <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
+                                st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
                             else:
-                                st.markdown(f"**{headline[:80]}** <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
-                            st.caption(f"📡 {source} | <span style='color:{sentiment_color};'>{sentiment.capitalize()}</span>")
+                                st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
+                            st.caption(f"📡 {source} | {sentiment.capitalize()}")
                         with col2:
                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
@@ -1785,18 +1852,19 @@ if st.session_state.trading_data.get('current_symbol'):
                                 url = item.get('url', '')
                                 sentiment = item.get('sentiment', 'neutral')
                                 
-                                # Format sentiment display with colored text
-                                if sentiment in ['positive', 'bullish']:
+                                # Format sentiment display with emojis
+                                sentiment_lower = sentiment.lower()
+                                if 'positive' in sentiment_lower or 'bullish' in sentiment_lower or 'somewhat-bullish' in sentiment_lower:
                                     sentiment_color = 'green'
-                                elif sentiment in ['negative', 'bearish']:
+                                elif 'negative' in sentiment_lower or 'bearish' in sentiment_lower or 'somewhat-bearish' in sentiment_lower:
                                     sentiment_color = 'red'
                                 else:
                                     sentiment_color = 'gray'
                                 
                                 if url:
-                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
+                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
                                 else:
-                                    st.markdown(f"• {headline[:60]}... - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
+                                    st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
