@@ -674,10 +674,7 @@ if mds:
                         df_viz = df.reset_index()
                         time_col = df_viz.columns[0]
                         df_viz = df_viz.rename(columns={time_col: 'time'})
- 
-                        # Prepare data for candlestick chart
-                        df_viz['Open_Close_Mid'] = (df_viz['Open'] + df_viz['Close']) / 2
-                        
+
                         # Base chart
                         base = alt.Chart(df_viz).encode(
                             x=alt.X('time:T', title='Time'),
@@ -686,37 +683,15 @@ if mds:
                                 alt.Tooltip('Close:Q', title='Price', format='$,.5f')
                             ]
                         ).properties(height=400, width='container')
- 
-                        # Candlestick bars
-                        candles = base.mark_bar(opacity=0.8).encode(
-                            y=alt.Y('Open_Close_Mid:Q', title='Price'),
-                            y2='Close:Q',
-                            color=alt.condition(
-                                alt.datum('Close:Q') > alt.datum('Open:Q'),
-                                alt.value('green'),  # Bullish candles
-                                alt.value('red')     # Bearish candles
-                            )
-                        )
-                        
-                        # Candle wicks
-                        wicks_upper = base.mark_rule(stroke='currentColor', strokeWidth=1).encode(
-                            y='High:Q',
-                            y2='Open_Close_Mid:Q'
-                        )
-                        wicks_lower = base.mark_rule(stroke='currentColor', strokeWidth=1).encode(
-                            y='Close:Q',
-                            y2='Low:Q'
-                        )
-                        
-                        # Moving averages
-                        price_line = base.mark_line(color='blue', strokeWidth=1, opacity=0.3).encode(
+
+                        price_line = base.mark_line(color='blue', strokeWidth=2).encode(
                             y=alt.Y('Close:Q', title=f'Price ({symbol})', scale=alt.Scale(zero=False))
                         )
- 
-                        ma20_line = base.mark_line(strokeDash=[5, 5], color='orange', strokeWidth=2).encode(y='MA20:Q')
-                        ma50_line = base.mark_line(strokeDash=[3, 3], color='green', strokeWidth=2).encode(y='MA50:Q')
- 
-                        chart_layers = [candles, wicks_upper, wicks_lower, price_line, ma20_line, ma50_line]
+
+                        ma20_line = base.mark_line(strokeDash=[5, 5], color='orange').encode(y='MA20:Q')
+                        ma50_line = base.mark_line(strokeDash=[3, 3], color='green').encode(y='MA50:Q')
+
+                        chart_layers = [price_line, ma20_line, ma50_line]
 
                         # Add entry/exit suggestions based on current analysis
                         if 'last_analysis' in st.session_state:
@@ -733,54 +708,111 @@ if mds:
                                     sl_price = entry_price * (1 - sl_pct)
                                     tp_price = entry_price * (1 + tp_pct)
                                     
-                                    entry_level = alt.Chart(pd.DataFrame([{
+                                    # Calculate liquidation price
+                                    liquidation_price = entry_price - (account_balance * sl_pct)
+                                    
+                                    entry_level = alt.Chart(pd.DataFrame({
                                         'time': df_viz['time'].iloc[-1],
                                         'Close': entry_price,
                                         'label': 'ENTRY'
-                                    }])).mark_rule(color='green', strokeWidth=3).encode(
+                                    })).mark_rule(color='green', strokeWidth=3).encode(
                                         y='Close:Q',
                                         size=alt.value(2)
                                     )
                                     
-                                    sl_level = alt.Chart(pd.DataFrame([{
+                                    sl_level = alt.Chart(pd.DataFrame({
                                         'time': df_viz['time'].iloc[-1],
                                         'Close': sl_price,
                                         'label': 'STOP LOSS'
-                                    }])).mark_rule(color='red', strokeDash=[5, 5]).encode(
+                                    })).mark_rule(color='red', strokeDash=[5, 5]).encode(
                                         y='Close:Q',
                                         size=alt.value(2)
                                     )
                                     
-                                    tp_level = alt.Chart(pd.DataFrame([{
+                                    tp_level = alt.Chart(pd.DataFrame({
                                         'time': df_viz['time'].iloc[-1],
                                         'Close': tp_price,
                                         'label': 'TAKE PROFIT'
-                                    }])).mark_rule(color='green', strokeDash=[3, 3]).encode(
+                                    })).mark_rule(color='green', strokeDash=[3, 3]).encode(
                                         y='Close:Q',
                                         size=alt.value(2)
                                     )
                                     
-                                     chart_layers.extend([entry_level, sl_level, tp_level])
-                     
-                                # Combine charts
-                                chart = alt.layer(*chart_layers).interactive().properties(
-                                    title=f'📈 {symbol} - Trading Analysis ({interval})',
-                                    height=400, width='container'
-                                )
-                                
-                                st.altair_chart(chart, use_container_width=True)
-                                
-                                # Legend
-                                st.markdown("""
-                                **Chart Legend:**
-                                - 🟠 **Price (Candlesticks)** - Current price action
-                                - 🟠 **MA20** - Short-term trend
-                                - 🟢 **MA50** - Medium-term trend
-                                - 🔵 **Green Line** - Suggested Entry/Exit Price
-                                - 🔴 **Red Dashed** - Stop Loss Level
-                                - 🟢 **Green Dashed** - Take Profit Level
-                                - ⚠️ **Yellow Star** - Liquidation Price Level
-                                """)
+                                    liq_level = alt.Chart(pd.DataFrame({
+                                        'time': df_viz['time'].iloc[-1],
+                                        'Close': liquidation_price,
+                                        'label': 'LIQUIDATION'
+                                    })).mark_rule(color='yellow', strokeWidth=4).encode(
+                                        y='Close:Q',
+                                        size=alt.value(3)
+                                    )
+                                    
+                                    chart_layers.extend([entry_level, sl_level, tp_level, liq_level])
+                                    
+                                    st.info(f"🟢 **BUY SETUP**")
+                                    st.write(f"• **Entry Price**: ${entry_price:.5f}")
+                                    st.write(f"• **Stop Loss**: ${sl_price:.5f} (risk: {sl_pct*100:.1f}%)")
+                                    st.write(f"• **Take Profit**: ${tp_price:.5f} (target: {tp_pct*100:.1f}%)")
+                                    st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                                    
+                                elif analysis.get('signal', {}).get('action') == 'SELL':
+                                    entry_price = current_price * (1 + 0.002)  # Slightly above current
+                                    sl_price = entry_price * (1 + sl_pct)
+                                    tp_price = entry_price * (1 - tp_pct)
+                                    
+                                    # Calculate liquidation price
+                                    liquidation_price = entry_price + (account_balance * sl_pct)
+                                    
+                                    entry_level = alt.Chart(pd.DataFrame({
+                                        'time': df_viz['time'].iloc[-1],
+                                        'Close': entry_price,
+                                        'label': 'EXIT'
+                                    })).mark_rule(color='red', strokeWidth=3).encode(
+                                        y='Close:Q',
+                                        size=alt.value(2)
+                                    )
+                                    
+                                    liq_level = alt.Chart(pd.DataFrame({
+                                        'time': df_viz['time'].iloc[-1],
+                                        'Close': liquidation_price,
+                                        'label': 'LIQUIDATION'
+                                    })).mark_rule(color='yellow', strokeWidth=4).encode(
+                                        y='Close:Q',
+                                        size=alt.value(3)
+                                    )
+                                    
+                                    chart_layers.append(entry_level)
+                                    chart_layers.append(liq_level)
+                                    
+                                    st.error(f"🔴 **SELL SETUP**")
+                                    st.write(f"• **Exit Price**: ${entry_price:.5f}")
+                                    st.write(f"• **Stop Loss**: ${tp_price:.5f}")
+                                    st.write(f"• **Take Profit**: ${sl_price:.5f}")
+                                    st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                                    
+                                    st.error(f"🔴 **SELL SETUP**")
+                                    st.write(f"• **Exit Price**: ${entry_price:.5f}")
+                                    st.write(f"• **Stop Loss**: ${tp_price:.5f}")
+                                    st.write(f"• **Take Profit**: ${sl_price:.5f}")
+
+                        # Combine charts
+                        chart = alt.layer(*chart_layers).interactive().properties(
+                            title=f'📈 {symbol} - Trading Analysis ({interval})',
+                            height=400, width='container'
+                        )
+
+                        st.altair_chart(chart, use_container_width=True)
+                        
+                        # Legend
+                        st.markdown("""
+                        **Chart Legend:**
+                        - 🔵 **Price** - Current price action
+                        - 🟠 **MA20** - Short-term trend
+                        - 🟢 **MA50** - Medium-term trend
+                        - 🟢 **Green Line** - Suggested Entry/Exit Price
+                        - 🔴 **Red Dashed** - Stop Loss Level
+                        - 🟢 **Green Dashed** - Take Profit Level
+                        """)
                         
                     except Exception as e:
                         st.warning(f"Chart error: {e}")
@@ -839,56 +871,12 @@ if mds:
                             })
                             st.line_chart(bb_normalized, use_container_width=True)
                             st.caption("📊 % deviation from middle band (±2 std dev)")
-                    
-                    # RSI Chart and Price Change Distribution side by side
-                    rsi_col, change_col = st.columns(2)
-                         
-                         with rsi_col:
-                             st.write("**📈 RSI**")
-                             rsi_df = df[['RSI']].copy().dropna()
-                             if not rsi_df.empty:
-                                 st.line_chart(rsi_df.tail(50), use_container_width=True)
-                         
-                         with change_col:
-                             st.write("**📊 Price Change Distribution (Multi-Timeframe)**")
-                             
-                             try:
-                                 import altair as alt
-                                 
-                                 # Calculate price changes for different periods
-                                 periods = [1, 5, 10, 20]  # days
-                                 price_changes = []
-                                 
-                                 for period in periods:
-                                     if len(df) > period:
-                                         change_pct = ((df['Close'].iloc[-1] - df['Close'].iloc[-period]) / df['Close'].iloc[-period]) * 100
-                                         price_changes.append({
-                                             'period': f'{period}D',
-                                             'change': change_pct,
-                                             'color': 'green' if change_pct > 0 else 'red'
-                                         })
-                                 
-                                 if price_changes:
-                                     change_df = pd.DataFrame(price_changes)
-                                     
-                                     # Create bar chart
-                                     base = alt.Chart(change_df).encode(
-                                         x=alt.X('period:N', title='Period'),
-                                         y=alt.Y('change:Q', title='Change %'),
-                                         color=alt.Color('color:N', legend=None)
-                                     ).properties(height=200, width='container')
-                                      
-                                     bar_chart = base.mark_bar(size=40)
-                                      
-                                     # Add horizontal line at 0
-                                     rule = alt.Chart(pd.DataFrame({'x': ['0%']})).mark_rule(
-                                         color='gray', strokeDash=[2, 2], strokeWidth=1
-                                     ).encode(x='x')
-                                      
-                                     st.altair_chart(bar_chart + rule, use_container_width=True)
-                                      
-                             except Exception as e:
-                                 st.warning(f"Price distribution chart error: {e}")
+                        
+                        # RSI Chart
+                        rsi_df = df[['RSI']].copy().dropna()
+                        if not rsi_df.empty:
+                            st.write("**📊 RSI**")
+                            st.line_chart(rsi_df.tail(50), use_container_width=True)
                     
                     with chart_col2:
                         st.write("**📉 MACD & Volume**")
@@ -1797,23 +1785,25 @@ if st.session_state.trading_data.get('current_symbol'):
                         sentiment = item.get('sentiment', 'neutral')
                         sentiment_score = item.get('sentiment_score', 0)
                         
-                        # Format sentiment display with emojis (Streamlit doesn't support HTML colors)
-                        sentiment_lower = sentiment.lower()
-                        if 'positive' in sentiment_lower or 'bullish' in sentiment_lower or 'somewhat-bullish' in sentiment_lower:
+                        # Format sentiment display with colored text
+                        if sentiment in ['positive', 'bullish']:
                             sentiment_emoji = '🟢'
-                        elif 'negative' in sentiment_lower or 'bearish' in sentiment_lower or 'somewhat-bearish' in sentiment_lower:
+                            sentiment_color = 'green'
+                        elif sentiment in ['negative', 'bearish']:
                             sentiment_emoji = '🔴'
+                            sentiment_color = 'red'
                         else:
                             sentiment_emoji = '⚪'
+                            sentiment_color = 'gray'
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             # Make headline clickable if URL available
                             if url:
-                                st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
+                                st.markdown(f"[**{headline[:80]}**]({url}) <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
                             else:
-                                st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
-                            st.caption(f"📡 {source} | {sentiment.capitalize()}")
+                                st.markdown(f"**{headline[:80]}** <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
+                            st.caption(f"📡 {source} | <span style='color:{sentiment_color};'>{sentiment.capitalize()}</span>")
                         with col2:
                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
@@ -1826,19 +1816,18 @@ if st.session_state.trading_data.get('current_symbol'):
                                 url = item.get('url', '')
                                 sentiment = item.get('sentiment', 'neutral')
                                 
-                                # Format sentiment display with emojis
-                                sentiment_lower = sentiment.lower()
-                                if 'positive' in sentiment_lower or 'bullish' in sentiment_lower or 'somewhat-bullish' in sentiment_lower:
+                                # Format sentiment display with colored text
+                                if sentiment in ['positive', 'bullish']:
                                     sentiment_color = 'green'
-                                elif 'negative' in sentiment_lower or 'bearish' in sentiment_lower or 'somewhat-bearish' in sentiment_lower:
+                                elif sentiment in ['negative', 'bearish']:
                                     sentiment_color = 'red'
                                 else:
                                     sentiment_color = 'gray'
                                 
                                 if url:
-                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
+                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
                                 else:
-                                    st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
+                                    st.markdown(f"• {headline[:60]}... - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
