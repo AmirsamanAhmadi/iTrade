@@ -1770,8 +1770,8 @@ if st.session_state.trading_data.get('current_symbol'):
                 filter_type = "All news" if show_all_news else f"Keywords: {', '.join(keywords)}"
                 url_filter = ", with links only" if with_url_only else ""
                 st.write(f"**📊 Found {len(symbol_news)} news items for {current_symbol}**")
-                st.caption(f"🔍 Filter: {filter_type}{url_filter}")
-                
+                 st.caption(f"🔍 Filter: {filter_type}{url_filter}")
+                 
                  if symbol_news:
                      st.write("#### 📰 Symbol News")
                      
