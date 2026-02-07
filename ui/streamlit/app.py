@@ -669,7 +669,7 @@ if mds:
                     st.write("#### 📈 Price Chart with Entry/Exit Levels")
                     st.caption(f"📡 Data Source: {data_source} | Interval: {interval}")
                     
-                     try:
+                    try:
                         import altair as alt
                         df_viz = df.reset_index()
                         time_col = df_viz.columns[0]
