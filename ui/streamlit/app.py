@@ -51,6 +51,14 @@ def load_config():
             st.error(f"Error loading config: {e}")
     return DEFAULT_CONFIG  # Fixed orphaned try-except
 
+def _save_config():
+    try:
+        os.makedirs(os.path.dirname(UI_STATE_PATH), exist_ok=True)
+        with open(UI_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(st.session_state.cfg, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.sidebar.error(f"Failed to save config: {e}")
+
 if 'cfg' not in st.session_state:
     st.session_state.cfg = load_config()
 
@@ -95,14 +103,6 @@ if user_symbols:
                 st.rerun()
 else:
     st.sidebar.write("No custom symbols added")
-
-def _save_config():
-    try:
-        os.makedirs(os.path.dirname(UI_STATE_PATH), exist_ok=True)
-        with open(UI_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(st.session_state.cfg, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        st.sidebar.error(f"Failed to save config: {e}")
 
 # ------------------------
 # Backtesting Helper Functions
@@ -504,6 +504,9 @@ if mds:
                         'timestamp': datetime.utcnow().isoformat()
                     }
                     
+                    # Generate trading signals and suggestions
+                    latest_price = df['Close'].iloc[-1]
+                    
                     # Update shared trading data
                     st.session_state.trading_data.update({
                         'current_symbol': symbol,
@@ -512,9 +515,6 @@ if mds:
                         'analysis_time': datetime.utcnow().isoformat()
                     })
                     
-                    # Generate trading signals and suggestions
-                    current_price = df['Close'].iloc[-1]
-                    
                     # Technical indicators
                     df['MA20'] = df['Close'].rolling(window=20).mean()
                     df['MA50'] = df['Close'].rolling(window=50).mean()
@@ -522,12 +522,12 @@ if mds:
                     df['MACD'] = calculate_macd(df['Close'])
                     
                     # Generate trading signal
-                    signal = generate_trading_signal(df, current_price)
+                    signal = generate_trading_signal(df, latest_price)
                     
                     # Calculate position size
                     position_size = (account_balance * risk_per_trade / 100)
-                    stop_loss_price = current_price * (1 - stop_loss_pct/100)
-                    take_profit_price = current_price * (1 + take_profit_pct/100)
+                    stop_loss_price = latest_price * (1 - stop_loss_pct/100)
+                    take_profit_price = latest_price * (1 + take_profit_pct/100)
                     
                     if 'Close' in df.columns:
                         volume = df['Volume'].iloc[-1] if 'Volume' in df.columns else 0
@@ -537,7 +537,7 @@ if mds:
                     # Display trading suggestion
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.metric("💰 Current Price", f"${current_price:.4f}")
+                        st.metric("💰 Current Price", f"${latest_price:.4f}")
                         st.metric("📊 Signal", signal['action'], delta=None)
                         if signal['confidence']:
                             st.metric("🎯 Confidence", f"{signal['confidence']:.0f}%")
@@ -550,26 +550,45 @@ if mds:
                     # Entry/Exit Price Suggestions
                     st.write("#### 🎯 Trading Recommendations")
                     
+                    # Calculate suggested holding period based on interval
+                    interval_periods = {
+                        '1m': 'hours',
+                        '5m': 'hours', 
+                        '15m': 'hours to 1 day',
+                        '30m': 'hours to 1-2 days',
+                        '1h': '1-3 days',
+                        '4h': '2-5 days',
+                        '1d': '5-15 days',
+                        '1w': 'weeks to months'
+                    }
+                    suggested_period = interval_periods.get(interval, 'days')
+                    
                     if signal['action'] == "BUY":
-                        entry_price = current_price * (1 - 0.002)  # Enter slightly below current price
+                        entry_price = latest_price * (1 - 0.002)  # Enter slightly below current price
+                        price_change_needed = ((take_profit_price - entry_price) / entry_price * 100)
+                        
                         st.success(f"🟢 **BUY SIGNAL** - Entry at ${entry_price:.4f}")
                         st.info(f"📊 **Position Size**: ${position_size:.2f} ({risk_per_trade}% of account)")
                         st.info(f"🛡️ **Stop Loss**: ${stop_loss_price:.4f} (risk: ${position_size * stop_loss_pct/100:.2f})")
                         st.info(f"🎯 **Take Profit**: ${take_profit_price:.4f} (profit: ${position_size * take_profit_pct/100:.2f})")
+                        st.info(f"⏱️ **Expected Timeframe**: Monitor for {suggested_period} | Need {price_change_needed:.2f}% move to hit TP")
                         
                     elif signal['action'] == "SELL":
-                        entry_price = current_price * (1 + 0.002)  # Enter slightly above current price
+                        entry_price = latest_price * (1 + 0.002)  # Enter slightly above current price
+                        price_change_needed = ((entry_price - take_profit_price) / entry_price * 100)
+                        
                         st.error(f"🔴 **SELL SIGNAL** - Entry at ${entry_price:.4f}")
                         st.info(f"📊 **Position Size**: ${position_size:.2f} ({risk_per_trade}% of account)")
                         st.info(f"🛡️ **Stop Loss**: ${take_profit_price:.4f} (risk: ${position_size * stop_loss_pct/100:.2f})")
                         st.info(f"🎯 **Take Profit**: ${stop_loss_price:.4f} (profit: ${position_size * take_profit_pct/100:.2f})")
+                        st.info(f"⏱️ **Expected Timeframe**: Monitor for {suggested_period} | Need {price_change_needed:.2f}% move to hit TP")
                         
                     else:
                         st.warning("🟡 **HOLD** - Wait for better setup")
                     
                     # Position Suggestion with multiple symbols
                     st.write("#### 📈 Recommended Positions to Monitor")
-                    recommended_symbols = get_recommended_positions(all_symbols, df, current_price)
+                    recommended_symbols = get_recommended_positions(all_symbols, df, latest_price)
                     
                     for rec in recommended_symbols[:5]:  # Show top 5
                         rec_col1, rec_col2, rec_col3, rec_col4 = st.columns(4)
@@ -634,6 +653,9 @@ if mds:
                     if df is not None:
                         st.info("📊 Using market data service data")
                 
+                # Track data source for display
+                data_source = "MetaTrader 5" if (mt5_service and mt5_service.connected and df is not None) else "Market Data Service"
+                
                 if df is not None and not df.empty:
                     # Calculate indicators
                     df['MA20'] = df['Close'].rolling(window=min(20, len(df))).mean()
@@ -653,6 +675,7 @@ if mds:
                     
                     # Enhanced price chart
                     st.write("#### 📈 Price Chart with Entry/Exit Levels")
+                    st.caption(f"📡 Data Source: {data_source} | Interval: {interval}")
                     
                     try:
                         import altair as alt
@@ -774,6 +797,7 @@ if mds:
 
                     # Clean unified analysis display
                     st.write("#### 📊 Complete Technical Analysis")
+                    st.caption(f"📡 Data Source: {data_source} | Last Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
                     
                     latest_price = df['Close'].iloc[-1]
                     latest_rsi = df['RSI'].iloc[-1] if not df['RSI'].empty else 50
@@ -796,42 +820,202 @@ if mds:
                     chart_col1, chart_col2 = st.columns(2)
                     
                     with chart_col1:
-                        st.write("**🎯 Price Chart**")
-                        try:
-                            import altair as alt
-                            df_viz = df.reset_index()
-                            time_col = df_viz.columns[0]
-                            df_viz = df_viz.rename(columns={time_col: 'time'})
-                            
-                            base = alt.Chart(df_viz).encode(
-                                x=alt.X('time:T', title='Time'),
-                                tooltip=[alt.Tooltip('time:T', title='Time'), alt.Tooltip('Close:Q', title='Price', format='$,.5f')]
-                            ).properties(height=300, width='container')
-                            
-                            price_line = base.mark_line(color='#1f77b4', strokeWidth=2).encode(
-                                y=alt.Y('Close:Q', title=f'Price ({symbol})', scale=alt.Scale(zero=False))
-                            )
-                            
-                            ma20_line = base.mark_line(strokeDash=[5, 5], color='orange').encode(y='MA20:Q')
-                            ma50_line = base.mark_line(strokeDash=[3, 3], color='green').encode(y='MA50:Q')
-                            
-                            chart = (price_line + ma20_line + ma50_line).interactive()
-                            st.altair_chart(chart, use_container_width=True)
-                        except Exception:
-                            st.line_chart(df[['Close', 'MA20', 'MA50']])
-                    
-                    with chart_col2:
                         st.write("**📈 Technical Indicators**")
+                        
+                        # Calculate additional indicators
+                        df['BB_Middle'] = df['Close'].rolling(window=20).mean()
+                        bb_std = df['Close'].rolling(window=20).std()
+                        df['BB_Upper'] = df['BB_Middle'] + (bb_std * 2)
+                        df['BB_Lower'] = df['BB_Middle'] - (bb_std * 2)
+                        
+                        # MACD Calculation
+                        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+                        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+                        df['MACD'] = exp1 - exp2
+                        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+                        
+                        # Bollinger Bands
+                        st.write("**📈 Bollinger Bands**")
+                        bb_data = df[['Close', 'BB_Upper', 'BB_Middle', 'BB_Lower']].tail(50).dropna()
+                        if not bb_data.empty:
+                            # Normalize to percentage for better scaling
+                            bb_middle = bb_data['BB_Middle']
+                            bb_normalized = pd.DataFrame({
+                                'Price %': ((bb_data['Close'] - bb_middle) / bb_middle * 100),
+                                'Upper Band %': ((bb_data['BB_Upper'] - bb_middle) / bb_middle * 100),
+                                'Middle Band %': 0,
+                                'Lower Band %': ((bb_data['BB_Lower'] - bb_middle) / bb_middle * 100)
+                            })
+                            st.line_chart(bb_normalized, use_container_width=True)
+                            st.caption("📊 % deviation from middle band (±2 std dev)")
                         
                         # RSI Chart
                         rsi_df = df[['RSI']].copy().dropna()
                         if not rsi_df.empty:
+                            st.write("**📊 RSI**")
                             st.line_chart(rsi_df.tail(50), use_container_width=True)
+                    
+                    with chart_col2:
+                        st.write("**📉 MACD & Volume**")
                         
                         # Volume Chart
                         if 'Volume' in df.columns:
+                            st.write("**📊 Volume**")
                             volume_data = df[['Volume']].tail(30)
                             st.bar_chart(volume_data, use_container_width=True)
+                        
+                        # MACD Signal Status
+                        macd_data = df[['MACD', 'Signal_Line']].tail(50).dropna()
+                        if not macd_data.empty:
+                            current_macd = df['MACD'].iloc[-1]
+                            current_signal = df['Signal_Line'].iloc[-1]
+                            if current_macd > current_signal:
+                                st.success("🟢 MACD above Signal - Bullish")
+                            else:
+                                st.error("🔴 MACD below Signal - Bearish")
+                        
+                        # BB Position indicator
+                        bb_data = df[['Close', 'BB_Upper', 'BB_Middle', 'BB_Lower']].tail(50).dropna()
+                        if not bb_data.empty:
+                            bb_position = (latest_price - df['BB_Lower'].iloc[-1]) / (df['BB_Upper'].iloc[-1] - df['BB_Lower'].iloc[-1])
+                            if bb_position > 0.8:
+                                st.warning("⚠️ Price near upper band - Overbought")
+                            elif bb_position < 0.2:
+                                st.success("✅ Price near lower band - Oversold")
+                            else:
+                                st.info("📊 Price in middle range")
+                    
+                    # Volume Analysis with moving average
+                    st.write("**📊 Volume Analysis**")
+                    vol_col1, vol_col2, vol_col3 = st.columns(3)
+                    
+                    with vol_col1:
+                        if 'Volume' in df.columns:
+                            df['Volume_MA20'] = df['Volume'].rolling(window=20).mean()
+                            volume_chart_data = df[['Volume', 'Volume_MA20']].tail(30).dropna()
+                            if not volume_chart_data.empty:
+                                st.line_chart(volume_chart_data, use_container_width=True)
+                    
+                    with vol_col2:
+                        if 'Volume' in df.columns:
+                            current_vol = df['Volume'].iloc[-1]
+                            avg_vol = df['Volume'].tail(20).mean()
+                            vol_ratio = current_vol / avg_vol if avg_vol > 0 else 0
+                            
+                            st.metric("Current Volume", f"{current_vol:,.0f}")
+                            st.metric("vs 20D Avg", f"{vol_ratio:.2f}x")
+                            
+                            if vol_ratio > 1.5:
+                                st.success("🔥 High Volume")
+                            elif vol_ratio < 0.5:
+                                st.warning("📉 Low Volume")
+                            else:
+                                st.info("📊 Normal Volume")
+                    
+                    with vol_col3:
+                        # Price Performance Metrics
+                        price_change_1d = ((latest_price / df['Close'].iloc[-2] - 1) * 100) if len(df) > 1 else 0
+                        price_change_5d = ((latest_price / df['Close'].iloc[-5] - 1) * 100) if len(df) > 5 else 0
+                        price_change_20d = ((latest_price / df['Close'].iloc[-20] - 1) * 100) if len(df) > 20 else 0
+                        
+                        st.metric("1D Change", f"{price_change_1d:+.2f}%")
+                        st.metric("5D Change", f"{price_change_5d:+.2f}%")
+                        st.metric("20D Change", f"{price_change_20d:+.2f}%")
+                    
+                    # Trend Momentum Gauge
+                    st.write("**📊 Trend Strength & Momentum**")
+                    
+                    momentum_col1, momentum_col2, momentum_col3 = st.columns(3)
+                    
+                    with momentum_col1:
+                        # Calculate ADX-like trend strength
+                        df['DM_Plus'] = df['High'].diff()
+                        df['DM_Minus'] = -df['Low'].diff()
+                        df['DM_Plus'] = df['DM_Plus'].where(df['DM_Plus'] > 0, 0)
+                        df['DM_Minus'] = df['DM_Minus'].where(df['DM_Minus'] > 0, 0)
+                        
+                        # Simple trend strength based on price action
+                        price_range = df['High'].tail(14).max() - df['Low'].tail(14).min()
+                        if price_range > 0:
+                            trend_strength = min(100, (abs(df['Close'].iloc[-1] - df['Close'].iloc[-14]) / price_range) * 100)
+                        else:
+                            trend_strength = 0
+                        
+                        st.metric("Trend Strength", f"{trend_strength:.0f}%")
+                        
+                        if trend_strength > 70:
+                            st.success("💪 Strong Trend")
+                        elif trend_strength > 40:
+                            st.info("📊 Moderate Trend")
+                        else:
+                            st.warning("😴 Weak/No Trend")
+                    
+                    with momentum_col2:
+                        # Price momentum (rate of change)
+                        roc_5 = ((latest_price / df['Close'].iloc[-6] - 1) * 100) if len(df) > 5 else 0
+                        roc_10 = ((latest_price / df['Close'].iloc[-11] - 1) * 100) if len(df) > 10 else 0
+                        
+                        st.metric("5-Period Momentum", f"{roc_5:+.2f}%")
+                        st.metric("10-Period Momentum", f"{roc_10:+.2f}%")
+                        
+                        if roc_5 > 0 and roc_10 > 0:
+                            st.success("📈 Bullish Momentum")
+                        elif roc_5 < 0 and roc_10 < 0:
+                            st.error("📉 Bearish Momentum")
+                        else:
+                            st.warning("⚖️ Mixed Signals")
+                    
+                    with momentum_col3:
+                        # Volatility trend
+                        recent_volatility = df['Close'].pct_change().tail(10).std() * 100
+                        overall_volatility = df['Close'].pct_change().std() * 100
+                        
+                        st.metric("Recent Volatility", f"{recent_volatility:.2f}%")
+                        st.metric("Overall Volatility", f"{overall_volatility:.2f}%")
+                        
+                        if recent_volatility > overall_volatility * 1.5:
+                            st.warning("⚠️ Volatility Increasing")
+                        elif recent_volatility < overall_volatility * 0.5:
+                            st.info("✅ Volatility Decreasing")
+                        else:
+                            st.info("📊 Stable Volatility")
+                    
+                    # Candlestick Pattern Detection (Simple)
+                    st.write("**🕯️ Recent Candlestick Patterns**")
+                    
+                    def detect_patterns(df):
+                        patterns = []
+                        if len(df) >= 3:
+                            # Check for Doji
+                            last_candle = df.iloc[-1]
+                            body = abs(last_candle['Close'] - last_candle['Open'])
+                            range_candle = last_candle['High'] - last_candle['Low']
+                            if range_candle > 0 and body / range_candle < 0.1:
+                                patterns.append("Doji - Indecision")
+                            
+                            # Check for Hammer
+                            if last_candle['Low'] < last_candle[['Open', 'Close']].min():
+                                lower_shadow = min(last_candle['Open'], last_candle['Close']) - last_candle['Low']
+                                body_size = abs(last_candle['Close'] - last_candle['Open'])
+                                if lower_shadow > body_size * 2:
+                                    patterns.append("Hammer - Potential Reversal")
+                            
+                            # Check for Bullish Engulfing
+                            if len(df) >= 2:
+                                prev = df.iloc[-2]
+                                curr = df.iloc[-1]
+                                if prev['Close'] < prev['Open'] and curr['Close'] > curr['Open']:
+                                    if curr['Open'] < prev['Close'] and curr['Close'] > prev['Open']:
+                                        patterns.append("Bullish Engulfing")
+                        
+                        return patterns
+                    
+                    patterns = detect_patterns(df.tail(5))
+                    if patterns:
+                        for pattern in patterns:
+                            st.info(f"🔍 {pattern}")
+                    else:
+                        st.info("ℹ️ No clear patterns detected in recent candles")
                     
                     # Key levels
                     st.write("**🎯 Key Trading Levels**")
@@ -1017,8 +1201,12 @@ if st.button("🚀 Run Backtest", type="primary"):
                     # Calculate returns
                     returns = calculate_backtest_returns(df, signals, initial_balance, risk_per_trade/100)
                     
+                        # Track backtest data source
+                    backtest_data_source = "MetaTrader 5" if (mt5_service and mt5_service.connected) else "Market Data Service (Yahoo Finance)"
+                    
                     # Display results
                     st.success("✅ Backtest completed!")
+                    st.caption(f"📡 Data Source: {backtest_data_source} | Symbol: {backtest_symbol} | Period: {backtest_days} days")
                     
                     # Performance metrics
                     col1, col2, col3, col4 = st.columns(4)
@@ -1177,6 +1365,7 @@ if st.button("🚀 Run Backtest", type="primary"):
                                 if col in trades_df.columns:
                                     trades_df[col] = trades_df[col].round(2)
                             
+                            st.caption(f"📡 Data Source: Simulated Trading based on {backtest_data_source} historical data")
                             st.dataframe(trades_df, use_container_width=True)
                             
                             # Show signals summary
@@ -1201,9 +1390,18 @@ if st.button("🚀 Run Backtest", type="primary"):
                                     'signal': '📊 Signal', 
                                     'price': '💰 Price'
                                 })
+                                st.caption("📡 Data Source: Generated from backtest strategy signals")
                                 st.dataframe(signals_df, use_container_width=True)
                     
-                    # Save results
+                        # Save results to session state for status update
+                    st.session_state.trading_data['backtest_results'] = returns
+                    st.session_state.trading_data['backtest_symbol'] = backtest_symbol
+                    st.session_state.trading_data['backtest_timestamp'] = datetime.utcnow().isoformat()
+                    
+                    # Force page refresh to update status indicators
+                    st.rerun()
+                    
+                    # Save results to file
                     try:
                         out_path = Path("db") / "backtest_results"
                         out_path.mkdir(parents=True, exist_ok=True)
@@ -1277,13 +1475,18 @@ if st.session_state.trading_data.get('current_symbol'):
         
         current_symbol = st.session_state.trading_data.get('current_symbol', '')
         
-        with st.button("📰 Refresh News", type="secondary"):
+        st.caption("📡 Data Source: News Service (Finviz/Financial News APIs)")
+        
+        if st.button("📰 Refresh News", type="secondary"):
             with st.spinner("Fetching news for current symbol..."):
                 # Focus on current symbol + related symbols
                 filter_symbols = [current_symbol] + ["AAPL", "GOOGL", "MSFT", "BTC-USD"][:4]
-                headlines = news_service.fetch_headlines(tickers=filter_symbols)
-                if headlines:
-                    st.success(f"📰 {len(headlines)} headlines fetched")
+                try:
+                    headlines = news_service.fetch_headlines(tickers=filter_symbols)
+                    if headlines:
+                        st.success(f"📰 {len(headlines)} headlines fetched")
+                except Exception as e:
+                    st.warning(f"Could not fetch headlines: {e}")
 
         # Display symbol-specific news
         try:
@@ -1291,8 +1494,124 @@ if st.session_state.trading_data.get('current_symbol'):
             news_items = _load_recent_news(NEWS_DB, days=3, limit=10)
             
             if news_items:
-                # Filter for current symbol
-                symbol_news = [item for item in news_items if current_symbol.lower() in item.get('headline', '').lower()]
+                # Parse symbol to extract actual company/asset name
+                def parse_symbol_to_keywords(symbol):
+                    """Parse various symbol formats and return relevant keywords"""
+                    symbol = symbol.upper().strip()
+                    
+                    # Handle exchange-prefixed symbols (e.g., NASDAQ-TSLA, NYSE-AAPL)
+                    if '-' in symbol:
+                        exchange, ticker = symbol.split('-', 1)
+                        # Map exchanges to their markets
+                        exchange = exchange.strip()
+                        ticker = ticker.strip()
+                    else:
+                        exchange = None
+                        ticker = symbol
+                    
+                    # Comprehensive symbol to keywords mapping
+                    keyword_map = {
+                        # Commodities
+                        'GC=F': ['gold', 'precious metal', 'bullion', 'commodity'],
+                        'XAUUSD=X': ['gold', 'xau', 'precious metal', 'bullion'],
+                        'SI=F': ['silver', 'precious metal', 'commodity'],
+                        'CL=F': ['oil', 'crude', 'petroleum', 'commodity', 'energy'],
+                        'NG=F': ['natural gas', 'gas', 'energy', 'commodity'],
+                        'PL=F': ['platinum', 'precious metal', 'commodity'],
+                        # Crypto
+                        'BTC-USD': ['bitcoin', 'btc', 'crypto', 'cryptocurrency', 'digital currency'],
+                        'ETH-USD': ['ethereum', 'eth', 'crypto', 'cryptocurrency'],
+                        'XRP-USD': ['ripple', 'xrp', 'crypto'],
+                        'LTC-USD': ['litecoin', 'ltc', 'crypto'],
+                        # Forex/Majors
+                        'EURUSD=X': ['eur/usd', 'euro', 'eurusd', 'currency', 'forex'],
+                        'GBPUSD=X': ['gbp/usd', 'pound', 'gbpusd', 'sterling', 'currency', 'forex'],
+                        'USDJPY=X': ['usd/jpy', 'yen', 'japan', 'currency', 'forex'],
+                        'AUDUSD=X': ['aud/usd', 'aussie', 'australia', 'currency', 'forex'],
+                        'USDCAD=X': ['usd/cad', 'canada', 'loonie', 'currency', 'forex'],
+                        'USDCHF=X': ['usd/chf', 'swiss', 'franc', 'currency', 'forex'],
+                        'NZDUSD=X': ['nzd/usd', 'kiwi', 'new zealand', 'currency', 'forex'],
+                        # Major Tech Stocks
+                        'AAPL': ['apple', 'aapl', 'iphone', 'mac', 'technology'],
+                        'GOOGL': ['google', 'alphabet', 'googl', 'search', 'technology'],
+                        'MSFT': ['microsoft', 'msft', 'windows', 'cloud', 'technology'],
+                        'TSLA': ['tesla', 'tsla', 'elon musk', 'ev', 'electric vehicle'],
+                        'AMZN': ['amazon', 'amzn', 'e-commerce', 'cloud', 'aws'],
+                        'META': ['meta', 'facebook', 'instagram', 'social media', 'technology'],
+                        'NVDA': ['nvidia', 'nvda', 'gpu', 'ai', 'semiconductor'],
+                        'NFLX': ['netflix', 'nflx', 'streaming', 'entertainment'],
+                        'AMD': ['amd', 'semiconductor', 'cpu', 'technology'],
+                        'INTC': ['intel', 'semiconductor', 'chip', 'technology'],
+                        'CRM': ['salesforce', 'cloud', 'software'],
+                        'ADBE': ['adobe', 'software', 'creative'],
+                        # Other Major Stocks
+                        'JPM': ['jpmorgan', 'bank', 'finance', 'jpm'],
+                        'BAC': ['bank of america', 'bank', 'finance', 'bac'],
+                        'WFC': ['wells fargo', 'bank', 'finance'],
+                        'GS': ['goldman sachs', 'bank', 'investment', 'finance'],
+                        'V': ['visa', 'payment', 'fintech', 'credit card'],
+                        'MA': ['mastercard', 'payment', 'fintech', 'credit card'],
+                        'DIS': ['disney', 'entertainment', 'streaming'],
+                        'KO': ['coca-cola', 'beverage', 'consumer'],
+                        'PEP': ['pepsico', 'beverage', 'consumer'],
+                        'MCD': ['mcdonalds', 'fast food', 'restaurant'],
+                        'SBUX': ['starbucks', 'coffee', 'restaurant'],
+                        'NKE': ['nike', 'sportswear', 'apparel'],
+                        'JNJ': ['johnson & johnson', 'pharma', 'healthcare'],
+                        'PFE': ['pfizer', 'pharma', 'healthcare', 'vaccine'],
+                        'MRNA': ['moderna', 'pharma', 'biotech', 'vaccine'],
+                        'XOM': ['exxon', 'oil', 'energy'],
+                        'CVX': ['chevron', 'oil', 'energy'],
+                        'BA': ['boeing', 'aviation', 'aerospace'],
+                        'GE': ['general electric', 'industrial'],
+                        'F': ['ford', 'automotive', 'car'],
+                        'GM': ['general motors', 'automotive', 'car'],
+                        # ETFs
+                        'SPY': ['spy', 's&p 500', 'sp500', 'etf', 'market'],
+                        'QQQ': ['qqq', 'nasdaq', 'etf', 'technology'],
+                        'IWM': ['iwm', 'russell', 'small cap', 'etf'],
+                        'DIA': ['dia', 'dow jones', 'dow', 'etf'],
+                        'VTI': ['vti', 'total market', 'etf'],
+                        'VXUS': ['vxus', 'international', 'etf'],
+                        'BND': ['bnd', 'bond', 'fixed income', 'etf'],
+                        'ARKK': ['arkk', 'innovation', 'etf', 'cathie wood'],
+                        # Indices
+                        'SPX': ['s&p 500', 'sp500', 'market', 'index'],
+                        'DJI': ['dow jones', 'dow', 'market', 'index'],
+                        'IXIC': ['nasdaq', 'composite', 'market', 'index'],
+                        'FTSE': ['ftse', 'uk', 'london', 'index'],
+                        'DAX': ['dax', 'germany', 'europe', 'index'],
+                        'N225': ['nikkei', 'japan', 'asia', 'index'],
+                        'HSI': ['hang seng', 'hong kong', 'asia', 'index'],
+                    }
+                    
+                    # Check direct match first
+                    if ticker in keyword_map:
+                        keywords = keyword_map[ticker]
+                        # Add exchange context if available
+                        if exchange:
+                            keywords = keywords + [exchange.lower()]
+                        return keywords
+                    
+                    # If no direct match, try to extract meaningful parts
+                    # Remove common suffixes/prefixes
+                    clean_symbol = ticker.replace('=X', '').replace('-USD', '').replace('.L', '')
+                    
+                    # Return ticker as fallback with exchange
+                    if exchange:
+                        return [ticker.lower(), exchange.lower(), clean_symbol.lower()]
+                    else:
+                        return [ticker.lower(), clean_symbol.lower()]
+                
+                # Get keywords for current symbol
+                keywords = parse_symbol_to_keywords(current_symbol)
+                
+                # Filter for current symbol using keywords
+                symbol_news = []
+                for item in news_items:
+                    headline = item.get('headline', '').lower()
+                    if any(keyword in headline for keyword in keywords):
+                        symbol_news.append(item)
                 
                 if symbol_news:
                     st.write("#### 📰 Symbol News")
@@ -1311,11 +1630,15 @@ if st.session_state.trading_data.get('current_symbol'):
                     st.metric(f"📰 {current_symbol} News", len(symbol_news))
                 else:
                     st.info(f"No recent news for {current_symbol}")
+                    st.caption(f"🔍 Searched for: {', '.join(keywords)}")
+            else:
+                st.warning("No news data available in database")
+        except Exception as e:
+            st.error(f"News display error: {e}")
+    except Exception as e:
+        st.error(f"News service error: {e}")
 else:
-                st.warning("No news data available")
-        except Exception as e:
-            st.error(f"News display error: {e}")
-        except Exception as e:
-            st.error(f"News display error: {e}")
-        except Exception as e:
-            st.error(f"News display error: {e}")
+    st.info("🔍 Select a symbol and run analysis to see market news")
+    
+st.write("---")
+st.write("🎯 **Dashboard Ready** | Start adding symbols from the sidebar to begin your analysis!")
