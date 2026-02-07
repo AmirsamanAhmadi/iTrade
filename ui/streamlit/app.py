@@ -1680,16 +1680,41 @@ if st.session_state.trading_data.get('current_symbol'):
                 # Get keywords for current symbol
                 keywords = parse_symbol_to_keywords(current_symbol)
                 
-                # Filter for current symbol using keywords
+                # Add filter options
+                col_filter1, col_filter2 = st.columns(2)
+                with col_filter1:
+                    show_all_news = st.checkbox("Show all news (no keyword filter)", value=False)
+                with col_filter2:
+                    with_url_only = st.checkbox("Only show news with links", value=True)
+                
+                # Filter for current symbol using keywords (unless show_all_news is checked)
                 symbol_news = []
                 for item in news_items:
-                    headline = item.get('headline', '').lower()
-                    if any(keyword in headline for keyword in keywords):
-                        symbol_news.append(item)
+                    if show_all_news:
+                        # Show all news, but prioritize with URLs if option checked
+                        if with_url_only:
+                            if item.get('url', ''):
+                                symbol_news.append(item)
+                        else:
+                            symbol_news.append(item)
+                    else:
+                        # Filter by keywords
+                        headline = item.get('headline', '').lower()
+                        if any(keyword in headline for keyword in keywords):
+                            if with_url_only:
+                                if item.get('url', ''):
+                                    symbol_news.append(item)
+                            else:
+                                symbol_news.append(item)
+                
+                # Sort: prioritize items with URLs
+                symbol_news.sort(key=lambda x: 1 if x.get('url', '') else 0, reverse=True)
                 
                 # Show summary
-                st.write(f"**📊 Found {len(symbol_news)} news items for {current_symbol} (out of {len(news_items)} total)**")
-                st.caption(f"🔍 Keywords searched: {', '.join(keywords)}")
+                filter_type = "All news" if show_all_news else f"Keywords: {', '.join(keywords)}"
+                url_filter = ", with links only" if with_url_only else ""
+                st.write(f"**📊 Found {len(symbol_news)} news items for {current_symbol}**")
+                st.caption(f"🔍 Filter: {filter_type}{url_filter}")
                 
                 if symbol_news:
                     st.write("#### 📰 Symbol News")
@@ -1719,7 +1744,7 @@ if st.session_state.trading_data.get('current_symbol'):
                         with col1:
                             # Make headline clickable if URL available
                             if url:
-                                st.markdown(f"**[{headline[:80]}]({url})** {sentiment_emoji}")
+                                st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
                             else:
                                 st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
                             st.caption(f"📡 {source} | {sentiment_emoji} {sentiment.capitalize()}")
