@@ -873,5 +873,6 @@ class NewsService:
         try:
             with open(path, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + '\n')
-        except Exception:
-            logger.exception('Failed to store raw news')
+        except Exception as e:
+            logger.error(f'Failed to store raw news to {path}: {e}')
+            logger.exception('Exception details')
