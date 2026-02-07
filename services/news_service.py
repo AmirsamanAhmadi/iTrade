@@ -39,11 +39,25 @@ class NewsService:
     # API Keys (should be set in environment variables)
     NEWSAPI_KEY: Optional[str] = None
     ALPHA_VANTAGE_KEY: Optional[str] = None
+    GNEWS_KEY: Optional[str] = None
+    CURRENTS_KEY: Optional[str] = None
+    NYT_KEY: Optional[str] = None
+    GUARDIAN_KEY: Optional[str] = None
+    BENZINGA_KEY: Optional[str] = None
+    STOCKTWITS_KEY: Optional[str] = None
+    MASSIVE_KEY: Optional[str] = None  # https://massive.com/
     
     def __post_init__(self):
         # Load API keys from environment
         self.NEWSAPI_KEY = os.getenv('NEWSAPI_KEY', '')
         self.ALPHA_VANTAGE_KEY = os.getenv('ALPHA_VANTAGE_KEY', '')
+        self.GNEWS_KEY = os.getenv('GNEWS_KEY', '')
+        self.CURRENTS_KEY = os.getenv('CURRENTS_KEY', '')
+        self.NYT_KEY = os.getenv('NYT_KEY', '')
+        self.GUARDIAN_KEY = os.getenv('GUARDIAN_KEY', '')
+        self.BENZINGA_KEY = os.getenv('BENZINGA_KEY', '')
+        self.STOCKTWITS_KEY = os.getenv('STOCKTWITS_KEY', '')
+        self.MASSIVE_KEY = os.getenv('MASSIVE_KEY', '')
         self.last_request_time = {}
         self.rate_limit_delay = 1.0  # seconds between requests to same source
     
@@ -100,7 +114,124 @@ class NewsService:
             except Exception as e:
                 logger.error(f"Alpha Vantage fetch failed: {e}")
         
-        # Source 4: MarketWatch scraping (fallback)
+        # Source 4: Massive Finance News API (if API key available)
+        if self.MASSIVE_KEY:
+            try:
+                massive_results = self._fetch_massive(tickers)
+                for r in massive_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"Massive fetch failed: {e}")
+        
+        # Source 5: GNews (if API key available)
+        if self.GNEWS_KEY:
+            try:
+                gnews_results = self._fetch_gnews(tickers)
+                for r in gnews_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"GNews fetch failed: {e}")
+        
+        # Source 6: Currents (if API key available)
+        if self.CURRENTS_KEY:
+            try:
+                currents_results = self._fetch_currents(tickers)
+                for r in currents_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"Currents fetch failed: {e}")
+        
+        # Source 7: New York Times (if API key available)
+        if self.NYT_KEY:
+            try:
+                nyt_results = self._fetch_nyt(tickers)
+                for r in nyt_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"NYT fetch failed: {e}")
+        
+        # Source 8: The Guardian (if API key available)
+        if self.GUARDIAN_KEY:
+            try:
+                guardian_results = self._fetch_guardian(tickers)
+                for r in guardian_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"Guardian fetch failed: {e}")
+        
+        # Source 9: Benzinga (if API key available)
+        if self.BENZINGA_KEY:
+            try:
+                benzinga_results = self._fetch_benzinga(tickers)
+                for r in benzinga_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"Benzinga fetch failed: {e}")
+        
+        # Source 10: StockTwits
+        if tickers:
+            try:
+                st_results = self._fetch_stocktwits(tickers)
+                for r in st_results:
+                    h = r.get('headline', '').strip()
+                    if h and h not in seen_headlines:
+                        seen_headlines.add(h)
+                        all_results.append(r)
+            except Exception as e:
+                logger.error(f"StockTwits fetch failed: {e}")
+        
+        # Source 11: Reddit
+        try:
+            reddit_results = self._fetch_reddit()
+            for r in reddit_results:
+                h = r.get('headline', '').strip()
+                if h and h not in seen_headlines:
+                    seen_headlines.add(h)
+                    all_results.append(r)
+        except Exception as e:
+            logger.error(f"Reddit fetch failed: {e}")
+        
+        # Source 12: Yahoo Finance
+        try:
+            yf_results = self._fetch_yahoo_finance_news(tickers)
+            for r in yf_results:
+                h = r.get('headline', '').strip()
+                if h and h not in seen_headlines:
+                    seen_headlines.add(h)
+                    all_results.append(r)
+        except Exception as e:
+            logger.error(f"Yahoo Finance fetch failed: {e}")
+        
+        # Source 13: Investing.com
+        try:
+            inv_results = self._fetch_investing_com(tickers)
+            for r in inv_results:
+                h = r.get('headline', '').strip()
+                if h and h not in seen_headlines:
+                    seen_headlines.add(h)
+                    all_results.append(r)
+        except Exception as e:
+            logger.error(f"Investing.com fetch failed: {e}")
+        
+        # Source 14: MarketWatch scraping (fallback)
         try:
             mw_results = self._fetch_marketwatch(tickers)
             for r in mw_results:
@@ -118,6 +249,7 @@ class NewsService:
         # Sort by timestamp (most recent first)
         all_results.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
         
+        logger.info(f"Total aggregated news items: {len(all_results)}")
         return all_results
     
     def _fetch_finviz(self) -> List[Dict]:
@@ -275,6 +407,458 @@ class NewsService:
                 
         except Exception as e:
             logger.error(f"MarketWatch error: {e}")
+        
+        return results
+
+    def _fetch_gnews(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from GNews API."""
+        results = []
+        if not self.GNEWS_KEY:
+            return results
+        
+        try:
+            logger.info("Fetching from GNews")
+            self._rate_limit('gnews')
+            
+            query = ' OR '.join(tickers[:3]) if tickers else 'stock market trading'
+            url = 'https://gnews.io/api/v4/search'
+            params = {
+                'q': query,
+                'lang': 'en',
+                'max': 20,
+                'apikey': self.GNEWS_KEY,
+                'from': (datetime.utcnow() - timedelta(days=3)).strftime('%Y-%m-%d')
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                for article in data.get('articles', []):
+                    headline = article.get('title', '')
+                    if headline:
+                        mapped = self._map_to_currencies(headline)
+                        results.append({
+                            'timestamp': article.get('publishedAt', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': f"gnews:{article.get('source', {}).get('name', 'GNews')}",
+                            'mapped_currencies': mapped,
+                            'url': article.get('url', ''),
+                            'description': article.get('description', '')
+                        })
+        except Exception as e:
+            logger.error(f"GNews error: {e}")
+        
+        return results
+
+    def _fetch_currents(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from Currents API."""
+        results = []
+        if not self.CURRENTS_KEY:
+            return results
+        
+        try:
+            logger.info("Fetching from Currents")
+            self._rate_limit('currents')
+            
+            query = ' OR '.join(tickers[:3]) if tickers else 'finance trading'
+            url = 'https://api.currentsapi.services/v1/search'
+            params = {
+                'keywords': query,
+                'language': 'en',
+                'apiKey': self.CURRENTS_KEY
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                for article in data.get('news', []):
+                    headline = article.get('title', '')
+                    if headline:
+                        mapped = self._map_to_currencies(headline)
+                        results.append({
+                            'timestamp': article.get('published', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': f"currents:{article.get('author', 'Currents')}",
+                            'mapped_currencies': mapped,
+                            'url': article.get('url', ''),
+                            'description': article.get('description', '')
+                        })
+        except Exception as e:
+            logger.error(f"Currents error: {e}")
+        
+        return results
+
+    def _fetch_nyt(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from New York Times API."""
+        results = []
+        if not self.NYT_KEY:
+            return results
+        
+        try:
+            logger.info("Fetching from NYT")
+            self._rate_limit('nyt')
+            
+            query = ' '.join(tickers[:2]) if tickers else 'stock market'
+            url = 'https://api.nytimes.com/svc/search/v2/articlesearch.json'
+            params = {
+                'q': query,
+                'api-key': self.NYT_KEY,
+                'fq': 'news_desk:("Business" "Financial")',
+                'sort': 'newest'
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                for article in data.get('response', {}).get('docs', []):
+                    headline = article.get('headline', {}).get('main', '')
+                    if headline:
+                        mapped = self._map_to_currencies(headline)
+                        results.append({
+                            'timestamp': article.get('pub_date', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': 'nytimes',
+                            'mapped_currencies': mapped,
+                            'url': article.get('web_url', ''),
+                            'description': article.get('snippet', '')
+                        })
+        except Exception as e:
+            logger.error(f"NYT error: {e}")
+        
+        return results
+
+    def _fetch_guardian(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from The Guardian API."""
+        results = []
+        if not self.GUARDIAN_KEY:
+            return results
+        
+        try:
+            logger.info("Fetching from Guardian")
+            self._rate_limit('guardian')
+            
+            query = ' '.join(tickers[:2]) if tickers else 'stock market'
+            url = 'https://content.guardianapis.com/search'
+            params = {
+                'q': query,
+                'api-key': self.GUARDIAN_KEY,
+                'section': 'business',
+                'show-fields': 'headline,trailText',
+                'order-by': 'newest',
+                'page-size': 20
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                for article in data.get('response', {}).get('results', []):
+                    headline = article.get('webTitle', '')
+                    if headline:
+                        mapped = self._map_to_currencies(headline)
+                        fields = article.get('fields', {})
+                        results.append({
+                            'timestamp': article.get('webPublicationDate', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': 'guardian',
+                            'mapped_currencies': mapped,
+                            'url': article.get('webUrl', ''),
+                            'description': fields.get('trailText', '')
+                        })
+        except Exception as e:
+            logger.error(f"Guardian error: {e}")
+        
+        return results
+
+    def _fetch_benzinga(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from Benzinga API (financial news specialist)."""
+        results = []
+        if not self.BENZINGA_KEY:
+            return results
+        
+        try:
+            logger.info("Fetching from Benzinga")
+            self._rate_limit('benzinga')
+            
+            url = 'https://api.benzinga.com/api/v2/news'
+            headers = {'Accept': 'application/json'}
+            params = {
+                'token': self.BENZINGA_KEY,
+                'pageSize': 20,
+                'displayOutput': 'full'
+            }
+            
+            if tickers:
+                params['tickers'] = ','.join(tickers[:5])
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                for article in data:
+                    headline = article.get('title', '')
+                    if headline:
+                        mapped = self._map_to_currencies(headline)
+                        results.append({
+                            'timestamp': article.get('created', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': f"benzinga:{article.get('author', {}).get('name', 'Benzinga')}",
+                            'mapped_currencies': mapped,
+                            'url': article.get('url', ''),
+                            'description': article.get('teaser', '')
+                        })
+        except Exception as e:
+            logger.error(f"Benzinga error: {e}")
+        
+        return results
+
+    def _fetch_stocktwits(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch trending symbols and ideas from StockTwits."""
+        results = []
+        
+        try:
+            logger.info("Fetching from StockTwits")
+            self._rate_limit('stocktwits')
+            
+            # Get trending symbols first
+            if tickers:
+                for ticker in tickers[:2]:  # Limit to avoid rate limits
+                    url = f'https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json'
+                    try:
+                        response = requests.get(url, timeout=10)
+                        if response.status_code == 200:
+                            data = response.json()
+                            for message in data.get('messages', [])[:10]:
+                                body = message.get('body', '')
+                                if body and len(body) > 50:  # Filter short messages
+                                    mapped = self._map_to_currencies(body)
+                                    results.append({
+                                        'timestamp': message.get('created_at', datetime.utcnow().isoformat()),
+                                        'headline': body[:150] + '...' if len(body) > 150 else body,
+                                        'source': f"stocktwits:{message.get('user', {}).get('username', 'StockTwits')}",
+                                        'mapped_currencies': mapped,
+                                        'url': f"https://stocktwits.com/symbol/{ticker}",
+                                        'sentiment': message.get('entities', {}).get('sentiment', {}).get('basic', 'neutral')
+                                    })
+                    except Exception as e:
+                        logger.warning(f"StockTwits symbol {ticker} error: {e}")
+                        
+        except Exception as e:
+            logger.error(f"StockTwits error: {e}")
+        
+        return results
+
+    def _fetch_reddit(self, subreddits: List[str] = None) -> List[Dict]:
+        """Fetch from Reddit finance communities."""
+        results = []
+        
+        try:
+            logger.info("Fetching from Reddit")
+            self._rate_limit('reddit')
+            
+            # Default finance subreddits
+            if not subreddits:
+                subreddits = ['wallstreetbets', 'investing', 'stocks', 'StockMarket']
+            
+            for subreddit in subreddits[:2]:  # Limit to 2 subreddits
+                try:
+                    url = f'https://www.reddit.com/r/{subreddit}/hot.json'
+                    headers = {'User-Agent': 'TradingBot/1.0'}
+                    params = {'limit': 10}
+                    
+                    response = requests.get(url, headers=headers, params=params, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        for post in data.get('data', {}).get('children', []):
+                            post_data = post.get('data', {})
+                            title = post_data.get('title', '')
+                            if title and post_data.get('score', 0) > 50:  # Filter by popularity
+                                mapped = self._map_to_currencies(title)
+                                results.append({
+                                    'timestamp': datetime.utcnow().isoformat(),
+                                    'headline': title,
+                                    'source': f"reddit:r/{subreddit}",
+                                    'mapped_currencies': mapped,
+                                    'url': f"https://reddit.com{post_data.get('permalink', '')}",
+                                    'description': post_data.get('selftext', '')[:200],
+                                    'score': post_data.get('score', 0)
+                                })
+                except Exception as e:
+                    logger.warning(f"Reddit r/{subreddit} error: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Reddit error: {e}")
+        
+        return results
+
+    def _fetch_massive(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from Massive Finance News API (massive.com)."""
+        results = []
+        if not self.MASSIVE_KEY:
+            return results
+        
+        try:
+            logger.info("Fetching from Massive Finance News API")
+            self._rate_limit('massive')
+            
+            # Massive API endpoint
+            url = 'https://api.massive.com/v1/news'
+            
+            headers = {
+                'Authorization': f'Bearer {self.MASSIVE_KEY}',
+                'Content-Type': 'application/json'
+            }
+            
+            params = {
+                'limit': 50,
+                'language': 'en',
+                'sort': 'published_desc'
+            }
+            
+            # Add ticker filter if provided
+            if tickers:
+                params['symbols'] = ','.join(tickers[:10])  # Massive supports multiple symbols
+            else:
+                # Default to market news
+                params['category'] = 'markets'
+            
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                for article in data.get('articles', []):
+                    headline = article.get('title', '')
+                    if headline:
+                        mapped = self._map_to_currencies(headline)
+                        
+                        # Extract sentiment if available
+                        sentiment = article.get('sentiment', {})
+                        sentiment_label = sentiment.get('label', 'neutral')
+                        sentiment_score = sentiment.get('score', 0)
+                        
+                        results.append({
+                            'timestamp': article.get('published_at', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': f"massive:{article.get('source', {}).get('name', 'Massive')}",
+                            'mapped_currencies': mapped,
+                            'url': article.get('url', ''),
+                            'description': article.get('summary', ''),
+                            'sentiment': sentiment_label,
+                            'sentiment_score': sentiment_score,
+                            'tickers': article.get('symbols', []),
+                            'category': article.get('category', 'general')
+                        })
+                        
+                logger.info(f"Massive API returned {len(results)} articles")
+                
+            elif response.status_code == 429:
+                logger.warning("Massive API rate limit reached")
+            else:
+                logger.warning(f"Massive API returned status {response.status_code}: {response.text}")
+                
+        except requests.exceptions.Timeout:
+            logger.error("Massive API request timed out")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Massive API request error: {e}")
+        except Exception as e:
+            logger.error(f"Massive API error: {e}")
+        
+        return results
+
+    def _fetch_yahoo_finance_news(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch news from Yahoo Finance RSS."""
+        results = []
+        
+        try:
+            logger.info("Fetching from Yahoo Finance")
+            self._rate_limit('yahoo_finance')
+            
+            try:
+                import feedparser
+                
+                if tickers:
+                    # Fetch for specific tickers
+                    for ticker in tickers[:3]:
+                        url = f'https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US'
+                        try:
+                            feed = feedparser.parse(url)
+                            for entry in feed.entries[:5]:
+                                headline = entry.get('title', '')
+                                if headline:
+                                    mapped = self._map_to_currencies(headline)
+                                    results.append({
+                                        'timestamp': entry.get('published', datetime.utcnow().isoformat()),
+                                        'headline': headline,
+                                        'source': f"yahoo:{ticker}",
+                                        'mapped_currencies': mapped,
+                                        'url': entry.get('link', ''),
+                                        'description': entry.get('summary', '')
+                                    })
+                        except Exception as e:
+                            logger.warning(f"Yahoo Finance {ticker} error: {e}")
+                else:
+                    # Fetch general market news
+                    url = 'https://feeds.finance.yahoo.com/rss/2.0/headline?region=US&lang=en-US'
+                    feed = feedparser.parse(url)
+                    for entry in feed.entries[:10]:
+                        headline = entry.get('title', '')
+                        if headline:
+                            mapped = self._map_to_currencies(headline)
+                            results.append({
+                                'timestamp': entry.get('published', datetime.utcnow().isoformat()),
+                                'headline': headline,
+                                'source': 'yahoo:market',
+                                'mapped_currencies': mapped,
+                                'url': entry.get('link', ''),
+                                'description': entry.get('summary', '')
+                            })
+                            
+            except ImportError:
+                logger.info("feedparser not installed, skipping Yahoo Finance RSS")
+                
+        except Exception as e:
+            logger.error(f"Yahoo Finance error: {e}")
+        
+        return results
+
+    def _fetch_investing_com(self, tickers: List[str] = None) -> List[Dict]:
+        """Fetch from Investing.com news section."""
+        results = []
+        
+        try:
+            logger.info("Fetching from Investing.com")
+            self._rate_limit('investing_com')
+            
+            # Investing.com news feed
+            url = 'https://www.investing.com/rss/news.rss'
+            
+            try:
+                import feedparser
+                feed = feedparser.parse(url)
+                
+                for entry in feed.entries[:15]:
+                    headline = entry.get('title', '')
+                    if headline:
+                        # Filter if tickers provided
+                        if tickers:
+                            ticker_found = any(t.lower() in headline.lower() for t in tickers)
+                            if not ticker_found:
+                                continue
+                        
+                        mapped = self._map_to_currencies(headline)
+                        results.append({
+                            'timestamp': entry.get('published', datetime.utcnow().isoformat()),
+                            'headline': headline,
+                            'source': 'investing.com',
+                            'mapped_currencies': mapped,
+                            'url': entry.get('link', ''),
+                            'description': entry.get('summary', '')
+                        })
+                        
+            except ImportError:
+                logger.info("feedparser not installed, skipping Investing.com")
+                
+        except Exception as e:
+            logger.error(f"Investing.com error: {e}")
         
         return results
 

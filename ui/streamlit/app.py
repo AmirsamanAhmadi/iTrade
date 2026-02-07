@@ -1489,31 +1489,56 @@ if st.session_state.trading_data.get('current_symbol'):
         except:
             source_status.append("❌ Finviz")
         
-        # Check API keys
-        if news_service.NEWSAPI_KEY:
-            source_status.append("✅ NewsAPI")
-        else:
-            source_status.append("⚠️ NewsAPI (add NEWSAPI_KEY to .env)")
+        # Check all API keys
+        api_sources = [
+            ("Massive", news_service.MASSIVE_KEY, "MASSIVE_KEY"),
+            ("NewsAPI", news_service.NEWSAPI_KEY, "NEWSAPI_KEY"),
+            ("Alpha Vantage", news_service.ALPHA_VANTAGE_KEY, "ALPHA_VANTAGE_KEY"),
+            ("GNews", news_service.GNEWS_KEY, "GNEWS_KEY"),
+            ("Currents", news_service.CURRENTS_KEY, "CURRENTS_KEY"),
+            ("NY Times", news_service.NYT_KEY, "NYT_KEY"),
+            ("Guardian", news_service.GUARDIAN_KEY, "GUARDIAN_KEY"),
+            ("Benzinga", news_service.BENZINGA_KEY, "BENZINGA_KEY"),
+        ]
         
-        if news_service.ALPHA_VANTAGE_KEY:
-            source_status.append("✅ Alpha Vantage")
-        else:
-            source_status.append("⚠️ Alpha Vantage (add ALPHA_VANTAGE_KEY to .env)")
+        for name, key, env_name in api_sources:
+            if key:
+                source_status.append(f"✅ {name}")
+            else:
+                source_status.append(f"⚠️ {name}")
         
-        # Check feedparser for MarketWatch
+        # Check RSS feed sources (no API key needed)
+        rss_sources = []
         try:
             import feedparser
-            source_status.append("✅ MarketWatch")
+            rss_sources.append("✅ MarketWatch")
+            rss_sources.append("✅ Yahoo Finance")
+            rss_sources.append("✅ Investing.com")
         except ImportError:
-            source_status.append("⚠️ MarketWatch (install: pip install feedparser)")
+            rss_sources.append("⚠️ RSS feeds (pip install feedparser)")
         
-        # Display status in columns
-        source_cols = st.columns(len(source_status))
-        for i, status in enumerate(source_status):
-            with source_cols[i]:
+        # Social/Community sources
+        social_status = []
+        social_status.append("✅ StockTwits")
+        social_status.append("✅ Reddit (WSB/Investing)")
+        
+        # Display all sources in expandable section
+        with st.expander(f"📡 News Sources ({len([s for s in source_status if '✅' in s])} active)"):
+            st.write("**Premium APIs:**")
+            api_cols = st.columns(4)
+            for i, status in enumerate(source_status[:8]):
+                with api_cols[i % 4]:
+                    st.caption(status)
+            
+            st.write("**RSS Feeds:**")
+            for status in rss_sources:
                 st.caption(status)
-        
-        st.info("💡 To add more sources, set API keys in .env file. See NEWS_API_SETUP.md for details.")
+            
+            st.write("**Social/Community:**")
+            for status in social_status:
+                st.caption(status)
+            
+            st.info("💡 Add API keys to .env file to activate more sources. See NEWS_API_SETUP.md")
         
         st.caption("📡 Data aggregated from all available sources")
         

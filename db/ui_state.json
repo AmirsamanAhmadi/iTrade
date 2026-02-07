@@ -1,11 +1,4 @@
 {
-  "system_on": true,
-  "mode": "Live",
-  "risk_per_trade_pct": 3.2,
-  "max_daily_loss_pct": 2.0,
-  "max_drawdown_pct": 20.0,
-  "news_lock": true,
-  "kill_switch": false,
   "market_symbols": [
     "XAUUSD=X",
     "GC=F",
@@ -13,9 +6,20 @@
     "GBPUSD=X"
   ],
   "default_symbol": "XAUUSD=X",
-  "news_days_lookback": 3,
-  "news_limit": 50,
   "market_interval": "1h",
   "market_days_fetch": 14,
+  "user_symbols": [
+    "TSLA"
+  ],
+  "matching_pairs": {},
+  "news_limit": 50,
+  "system_on": true,
+  "mode": "Live",
+  "risk_per_trade_pct": 3.2,
+  "max_daily_loss_pct": 2.0,
+  "max_drawdown_pct": 20.0,
+  "news_lock": true,
+  "kill_switch": false,
+  "news_days_lookback": 3,
   "updated_at": "2026-02-07T06:13:29.099349"
 }
