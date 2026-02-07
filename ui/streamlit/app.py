@@ -762,11 +762,16 @@ if mds:
                                     
                                     chart_layers.extend([entry_level, sl_level, tp_level])
                                     
-                                    # Display entry/exit info
-                                    st.info(f"🟢 **BUY SETUP**")
-                                    st.write(f"• **Entry Price**: ${entry_price:.5f}")
-                                    st.write(f"• **Stop Loss**: ${sl_price:.5f} (risk: {sl_pct*100:.1f}%)")
-                                    st.write(f"• **Take Profit**: ${tp_price:.5f} (target: {tp_pct*100:.1f}%)")
+                    # Display entry/exit info
+                    st.info(f"🟢 **BUY SETUP**")
+                    st.write(f"• **Entry Price**: ${entry_price:.5f}")
+                    st.write(f"• **Stop Loss**: ${sl_price:.5f} (risk: ${sl_pct*100:.1f}%)")
+                    st.write(f"• **Take Profit**: ${tp_price:.5f} (target: {tp_pct*100:.1f}%)")
+                    st.write(f"• **Position Size**: ${position_size:.2f}")
+                    if liquidation_price:
+                        st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                        distance_to_liq = ((liquidation_price - entry_price) / entry_price) * 100
+                        st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
                                     
                                 elif analysis.get('signal', {}).get('action') == 'SELL':
                                     entry_price = current_price * (1 + 0.002)  # Slightly above current
@@ -784,10 +789,15 @@ if mds:
                                     
                                     chart_layers.append(entry_level)
                                     
-                                    st.error(f"🔴 **SELL SETUP**")
-                                    st.write(f"• **Exit Price**: ${entry_price:.5f}")
-                                    st.write(f"• **Stop Loss**: ${tp_price:.5f}")
-                                    st.write(f"• **Take Profit**: ${sl_price:.5f}")
+                                st.error(f"🔴 **SELL SETUP**")
+                                st.write(f"• **Exit Price**: ${entry_price:.5f}")
+                                st.write(f"• **Stop Loss**: ${tp_price:.5f}")
+                                st.write(f"• **Take Profit**: ${sl_price:.5f}")
+                                st.write(f"• **Position Size**: ${position_size:.2f}")
+                                if liquidation_price:
+                                    st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                                    distance_to_liq = ((entry_price - liquidation_price) / entry_price) * 100
+                                    st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
 
                         # Combine charts
                         chart = alt.layer(*chart_layers).interactive().properties(
@@ -800,12 +810,13 @@ if mds:
                         # Legend
                         st.markdown("""
                         **Chart Legend:**
-                        - 🔵 **Price** - Current price action
+                        - 🟠 **Price (Candlesticks)** - Current price action
                         - 🟠 **MA20** - Short-term trend
                         - 🟢 **MA50** - Medium-term trend
-                        - 🟢 **Green Line** - Suggested Entry/Exit Price
+                        - 🔵 **Green Line** - Suggested Entry/Exit Price
                         - 🔴 **Red Dashed** - Stop Loss Level
                         - 🟢 **Green Dashed** - Take Profit Level
+                        - ⚠️ **Yellow Star** - Liquidation Price Level
                         """)
                         
                     except Exception as e:
