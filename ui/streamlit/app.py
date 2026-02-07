@@ -1314,3 +1314,5 @@ if st.session_state.trading_data.get('current_symbol'):
             else:
                 st.warning("No news data available")
 st.write("🎯 **Dashboard Ready** | Start adding symbols from the sidebar to begin your analysis!")
+        except Exception as e:
+            st.error(f"News display error: {e}")
