@@ -775,6 +775,9 @@ if mds:
                     # Additional technical charts and indicators
                     st.write("#### 📊 Advanced Technical Indicators")
                     
+                    # Define latest_price in this scope
+                    latest_price = df['Close'].iloc[-1]
+                    
                     col1, col2 = st.columns(2)
                     with col1:
                         # RSI Chart
@@ -899,8 +902,9 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.subheader("📊 Current Analysis")
     if st.session_state.trading_data.get('current_symbol'):
+        current_price = st.session_state.trading_data.get('current_price', 0)
         st.write(f"**Symbol**: {st.session_state.trading_data['current_symbol']}")
-        st.write(f"**Price**: ${st.session_state.trading_data.get('current_price', 0):.5f}")
+        st.write(f"**Price**: ${current_price:.5f}")
         st.write(f"**Updated**: {st.session_state.trading_data.get('analysis_time', 'N/A')}")
         
         if st.session_state.trading_data.get('last_analysis'):
