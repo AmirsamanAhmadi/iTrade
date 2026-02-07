@@ -11,3 +11,10 @@ httpx
 pytest
 loguru
 finvizfinance
+
+# News Service Optional Dependencies
+# For MarketWatch RSS support:
+# feedparser>=6.0.0
+
+# News Service already uses:
+# requests>=2.28.0 (already in requirements)
