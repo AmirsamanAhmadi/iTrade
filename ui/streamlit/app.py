@@ -1785,25 +1785,22 @@ if st.session_state.trading_data.get('current_symbol'):
                         sentiment = item.get('sentiment', 'neutral')
                         sentiment_score = item.get('sentiment_score', 0)
                         
-                        # Format sentiment display with colored text
-                        if sentiment in ['positive', 'bullish']:
-                            sentiment_emoji = '🟢'
-                            sentiment_color = 'green'
-                        elif sentiment in ['negative', 'bearish']:
-                            sentiment_emoji = '🔴'
-                            sentiment_color = 'red'
-                        else:
-                            sentiment_emoji = '⚪'
-                            sentiment_color = 'gray'
-                        
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            # Make headline clickable if URL available
-                            if url:
-                                st.markdown(f"[**{headline[:80]}**]({url}) <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
-                            else:
-                                st.markdown(f"**{headline[:80]}** <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
-                            st.caption(f"📡 {source} | <span style='color:{sentiment_color};'>{sentiment.capitalize()}</span>")
+                         # Format sentiment display with emojis only
+                         if sentiment in ['positive', 'bullish']:
+                             sentiment_emoji = '🟢'
+                         elif sentiment in ['negative', 'bearish']:
+                             sentiment_emoji = '🔴'
+                         else:
+                             sentiment_emoji = '⚪'
+                         
+                         col1, col2 = st.columns([3, 1])
+                         with col1:
+                             # Make headline clickable if URL available
+                             if url:
+                                 st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
+                             else:
+                                 st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
+                             st.caption(f"📡 {source}")
                         with col2:
                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
@@ -1816,18 +1813,18 @@ if st.session_state.trading_data.get('current_symbol'):
                                 url = item.get('url', '')
                                 sentiment = item.get('sentiment', 'neutral')
                                 
-                                # Format sentiment display with colored text
-                                if sentiment in ['positive', 'bullish']:
-                                    sentiment_color = 'green'
-                                elif sentiment in ['negative', 'bearish']:
-                                    sentiment_color = 'red'
-                                else:
-                                    sentiment_color = 'gray'
-                                
-                                if url:
-                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
-                                else:
-                                    st.markdown(f"• {headline[:60]}... - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
+                             # Format sentiment display with emojis only
+                             if sentiment in ['positive', 'bullish']:
+                                 sentiment_emoji = '🟢'
+                             elif sentiment in ['negative', 'bearish']:
+                                 sentiment_emoji = '🔴'
+                             else:
+                                 sentiment_emoji = '⚪'
+                             
+                             if url:
+                                 st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
+                             else:
+                                 st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
