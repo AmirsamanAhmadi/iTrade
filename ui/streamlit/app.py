@@ -1781,7 +1781,7 @@ if st.session_state.trading_data.get('current_symbol'):
                         headline = item.get('headline', 'No headline')
                         source = item.get('source', 'Unknown')
                         timestamp = item.get('timestamp', '')
-                        url = item.get('url', '')
+                         url = item.get('url', '')
                          sentiment = item.get('sentiment', 'neutral')
                          sentiment_score = item.get('sentiment_score', 0)
                          
