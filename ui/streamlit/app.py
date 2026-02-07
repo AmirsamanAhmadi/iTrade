@@ -760,25 +760,30 @@ if mds:
                                         size=alt.value(2)
                                     )
                                     
-                         chart_layers.extend([entry_level, sl_level, tp_level])
-                        
-                        # Display entry/exit info
-                        if analysis.get('signal', {}).get('action') == 'BUY':
-                            st.info(f"🟢 **BUY SETUP**")
-                            st.write(f"• **Entry Price**: ${entry_price:.5f}")
-                            st.write(f"• **Stop Loss**: ${sl_price:.5f} (risk: {sl_pct*100:.1f}%)")
-                            st.write(f"• **Take Profit**: ${tp_price:.5f} (target: {tp_pct*100:.1f}%)")
-                            st.write(f"• **Position Size**: ${position_size:.2f}")
-                            if liquidation_price:
-                                st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
-                                distance_to_liq = ((liquidation_price - entry_price) / entry_price) * 100
-                                st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
-                        
-                        elif analysis.get('signal', {}).get('action') == 'SELL':
-                            st.error(f"🔴 **SELL SETUP**")
-                            st.write(f"• **Exit Price**: ${entry_price:.5f}")
-                            st.write(f"• **Stop Loss**: ${tp_price:.5f}")
-                            st.write(f"• **Take Profit**: ${sl_price:.5f}")
+                                     chart_layers.extend([entry_level, sl_level, tp_level])
+                     
+                                     # Display entry/exit info
+                                     if analysis.get('signal', {}).get('action') == 'BUY':
+                                         st.info(f"🟢 **BUY SETUP**")
+                                         st.write(f"• **Entry Price**: \${entry_price:.5f}")
+                                         st.write(f"• **Stop Loss**: \${sl_price:.5f} (risk: {sl_pct*100:.1f}%)")
+                                         st.write(f"• **Take Profit**: \${tp_price:.5f} (target: {tp_pct*100:.1f}%)")
+                                         st.write(f"• **Position Size**: \${position_size:.2f}")
+                                         if liquidation_price:
+                                             st.write(f"• **Liquidation Price**: \${liquidation_price:.5f} (margin call level)")
+                                             distance_to_liq = ((liquidation_price - entry_price) / entry_price) * 100
+                                             st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
+                                     
+                                     elif analysis.get('signal', {}).get('action') == 'SELL':
+                                         st.error(f"🔴 **SELL SETUP**")
+                                         st.write(f"• **Exit Price**: \${entry_price:.5f}")
+                                         st.write(f"• **Stop Loss**: \${tp_price:.5f}")
+                                         st.write(f"• **Take Profit**: \${sl_price:.5f}")
+                                         st.write(f"• **Position Size**: \${position_size:.2f}")
+                                         if liquidation_price:
+                                             st.write(f"• **Liquidation Price**: \${liquidation_price:.5f} (margin call level)")
+                                             distance_to_liq = ((entry_price - liquidation_price) / entry_price) * 100
+                                             st.write(f"• **Distance to Liquidation**: {distance_to_liq:.1f}%")
                             st.write(f"• **Position Size**: ${position_size:.2f}")
                             if liquidation_price:
                                 st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
