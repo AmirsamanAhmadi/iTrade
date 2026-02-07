@@ -36,10 +36,24 @@ INTERVAL_MAP = {
     # 4h will be produced by resampling 1h
 }
 
+# FxPro symbol mapping (FxPro uses different symbols)
+FXPRO_SYMBOL_MAP = {
+    'EURUSD=X': 'EURUSD',
+    'GBPUSD=X': 'GBPUSD',
+    'USDJPY=X': 'USDJPY',
+    'AUDUSD=X': 'AUDUSD',
+    'USDCAD=X': 'USDCAD',
+    'USDCHF=X': 'USDCHF',
+    'NZDUSD=X': 'NZDUSD',
+    'GC=F': 'XAUUSD',  # Gold
+    'SI=F': 'XAGUSD',  # Silver
+}
+
 @dataclass
 class MarketDataService:
     cache_ttl: int = CACHE_TTL
-
+    use_fxpro: bool = False  # Toggle for FxPro data source
+    
     def _cache_path(self, ticker: str, interval: str, start: Optional[str], end: Optional[str]) -> Path:
         key = f"{ticker}|{interval}|{start}|{end}"
         h = hashlib.sha1(key.encode()).hexdigest()
@@ -139,3 +153,78 @@ class MarketDataService:
             else:
                 df = df.bfill()
         return df
+    
+    def fetch_fxpro_ohlc(self, ticker: str, interval: str, start: Optional[str] = None, end: Optional[str] = None) -> pd.DataFrame:
+        """Fetch OHLC data from FxPro public API.
+        
+        FxPro provides free access to forex and commodity data.
+        """
+        import requests
+        
+        # Map interval to FxPro format
+        fxpro_interval_map = {
+            '1m': 'm1',
+            '15m': 'm15', 
+            '1h': 'h1',
+            '4h': 'h4',
+        }
+        
+        fxpro_interval = fxpro_interval_map.get(interval, 'h1')
+        
+        # Map ticker to FxPro symbol
+        fxpro_symbol = FXPRO_SYMBOL_MAP.get(ticker, ticker.replace('=X', ''))
+        
+        # FxPro public API endpoint
+        url = f"https://api.fxpro.com/api/candles/{fxpro_symbol}/{fxpro_interval}"
+        
+        params = {
+            'limit': 1000,
+        }
+        
+        if start:
+            params['from'] = start
+        if end:
+            params['to'] = end
+        
+        logger.info(f"Fetching {ticker} {interval} from FxPro")
+        
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('status') != 'success':
+                logger.warning(f"FxPro API returned status: {data}")
+                return pd.DataFrame()
+            
+            candles = data.get('data', {}).get('candles', [])
+            
+            if not candles:
+                logger.warning("No data returned from FxPro")
+                return pd.DataFrame()
+            
+            # Parse candles
+            records = []
+            for candle in candles:
+                records.append({
+                    'Open': float(candle.get('o', 0)),
+                    'High': float(candle.get('h', 0)),
+                    'Low': float(candle.get('l', 0)),
+                    'Close': float(candle.get('c', 0)),
+                    'Volume': float(candle.get('v', 0)),
+                    'time': pd.to_datetime(candle.get('time', candle.get('timestamp', ''))),
+                })
+            
+            df = pd.DataFrame(records)
+            df.set_index('time', inplace=True)
+            df.index = df.index.tz_localize('UTC')
+            
+            logger.info(f"FxPro returned {len(df)} candles")
+            return df
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"FxPro API request failed: {e}")
+            return pd.DataFrame()
+        except Exception as e:
+            logger.exception(f"FxPro data parsing failed: {e}")
+            return pd.DataFrame()

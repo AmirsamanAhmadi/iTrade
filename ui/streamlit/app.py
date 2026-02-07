@@ -450,7 +450,7 @@ if mds:
         interval = st.selectbox("Timeframe", intervals, index=intervals.index(default_int) if default_int in intervals else 4)
 
         # Chart data source selection
-        data_source_options = ["Market Data Service (Yahoo Finance)", "Simulated Data"]
+        data_source_options = ["Market Data Service (Yahoo Finance)", "FxPro", "Simulated Data"]
         default_source = st.session_state.cfg.get("chart_data_source", "Market Data Service (Yahoo Finance)")
         chart_data_source = st.selectbox("📊 Chart Data Source", data_source_options, 
                                        index=data_source_options.index(default_source) if default_source in data_source_options else 0)
@@ -624,6 +624,18 @@ if mds:
                     df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
                     if df is not None:
                         st.success(f"📊 Using {chart_data_source}")
+                elif chart_data_source == "FxPro":
+                    # Try FxPro first for forex pairs
+                    if hasattr(mds, 'fetch_fxpro_ohlc'):
+                        df = mds.fetch_fxpro_ohlc(symbol, interval, start=start, end=end)
+                        if df is not None and not df.empty:
+                            st.success(f"📊 Using FxPro data")
+                        else:
+                            st.warning("FxPro unavailable, falling back to Yahoo Finance")
+                            df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                    else:
+                        st.warning("FxPro not available, using Yahoo Finance")
+                        df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
                 else:
                     # Simulated data for testing
                     import numpy as np
@@ -666,7 +678,7 @@ if mds:
                     col4.metric("📉 MA50", f"${df['MA50'].iloc[-1]:.5f}")
                     
                     # Enhanced price chart
-                    st.write("#### 📈 Price Chart with Entry/Exit Levels")
+                    st.write("#### 📈 Candlestick Chart with Entry/Exit Levels")
                     st.caption(f"📡 Data Source: {data_source} | Interval: {interval}")
                     
                     try:
@@ -674,24 +686,45 @@ if mds:
                         df_viz = df.reset_index()
                         time_col = df_viz.columns[0]
                         df_viz = df_viz.rename(columns={time_col: 'time'})
-
-                        # Base chart
+                        
+                        # Calculate OHLC for candlestick chart
+                        df_viz['color'] = alt.condition(
+                            alt.datum.Close >= alt.datum.Open,
+                            alt.value('#26a69a'),  # Green for bullish
+                            alt.value('#ef5350')   # Red for bearish
+                        )
+                        
+                        # Create candlestick chart
                         base = alt.Chart(df_viz).encode(
                             x=alt.X('time:T', title='Time'),
                             tooltip=[
                                 alt.Tooltip('time:T', title='Time', format='%Y-%m-%d %H:%M'),
-                                alt.Tooltip('Close:Q', title='Price', format='$,.5f')
+                                alt.Tooltip('Open:Q', title='Open', format='$,.5f'),
+                                alt.Tooltip('High:Q', title='High', format='$,.5f'),
+                                alt.Tooltip('Low:Q', title='Low', format='$,.5f'),
+                                alt.Tooltip('Close:Q', title='Close', format='$,.5f'),
                             ]
                         ).properties(height=400, width='container')
-
-                        price_line = base.mark_line(color='blue', strokeWidth=2).encode(
-                            y=alt.Y('Close:Q', title=f'Price ({symbol})', scale=alt.Scale(zero=False))
+                        
+                        # Candlestick body (Open-Close rectangle)
+                        candles = base.mark_bar(size=3).encode(
+                            y='Open:Q',
+                            y2='Close:Q',
+                            color=alt.Color('color:N', legend=None)
                         )
-
-                        ma20_line = base.mark_line(strokeDash=[5, 5], color='orange').encode(y='MA20:Q')
-                        ma50_line = base.mark_line(strokeDash=[3, 3], color='green').encode(y='MA50:Q')
-
-                        chart_layers = [price_line, ma20_line, ma50_line]
+                        
+                        # Candlestick wicks (High-Low line)
+                        wicks = base.mark_rule(strokeWidth=1).encode(
+                            y='Low:Q',
+                            y2='High:Q',
+                            color=alt.Color('color:N', legend=None)
+                        )
+                        
+                        # Moving averages
+                        ma20_line = base.mark_line(strokeDash=[5, 5], color='orange', strokeWidth=2).encode(y='MA20:Q')
+                        ma50_line = base.mark_line(strokeDash=[3, 3], color='purple', strokeWidth=2).encode(y='MA50:Q')
+                        
+                        chart_layers = [candles, wicks, ma20_line, ma50_line]
 
                         # Add entry/exit suggestions based on current analysis
                         if 'last_analysis' in st.session_state:
@@ -797,21 +830,23 @@ if mds:
 
                         # Combine charts
                         chart = alt.layer(*chart_layers).interactive().properties(
-                            title=f'📈 {symbol} - Trading Analysis ({interval})',
+                            title=f'📈 {symbol} - Candlestick Chart ({interval})',
                             height=400, width='container'
                         )
-
+                        
                         st.altair_chart(chart, use_container_width=True)
                         
                         # Legend
                         st.markdown("""
                         **Chart Legend:**
-                        - 🔵 **Price** - Current price action
+                        - 🟢 **Green Candle** - Bullish (Close > Open)
+                        - 🔴 **Red Candle** - Bearish (Close < Open)
                         - 🟠 **MA20** - Short-term trend
-                        - 🟢 **MA50** - Medium-term trend
+                        - 🟣 **MA50** - Medium-term trend
                         - 🟢 **Green Line** - Suggested Entry/Exit Price
                         - 🔴 **Red Dashed** - Stop Loss Level
                         - 🟢 **Green Dashed** - Take Profit Level
+                        - 🟡 **Yellow Thick** - Liquidation Price Level
                         """)
                         
                     except Exception as e:
@@ -1770,61 +1805,64 @@ if st.session_state.trading_data.get('current_symbol'):
                 filter_type = "All news" if show_all_news else f"Keywords: {', '.join(keywords)}"
                 url_filter = ", with links only" if with_url_only else ""
                 st.write(f"**📊 Found {len(symbol_news)} news items for {current_symbol}**")
-                 st.caption(f"🔍 Filter: {filter_type}{url_filter}")
-                 
-                 if symbol_news:
-                     st.write("#### 📰 Symbol News")
-                     
-                     # Show up to 10 items with an expander for more
-                     display_count = min(10, len(symbol_news))
-                     for i, item in enumerate(symbol_news[:display_count]):
-                         headline = item.get('headline', 'No headline')
-                         source = item.get('source', 'Unknown')
-                         timestamp = item.get('timestamp', '')
-                         url = item.get('url', '')
-                         sentiment = item.get('sentiment', 'neutral')
-                         sentiment_score = item.get('sentiment_score', 0)
-                         
-                         # Format sentiment display with emojis only
-                         if sentiment in ['positive', 'bullish']:
-                             sentiment_emoji = '🟢'
-                         elif sentiment in ['negative', 'bearish']:
-                             sentiment_emoji = '🔴'
-                         else:
-                             sentiment_emoji = '⚪'
-                         
-                         col1, col2 = st.columns([3, 1])
-                         with col1:
-                             # Make headline clickable if URL available
-                             if url:
-                                 st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
-                             else:
-                                 st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
-                             st.caption(f"📡 {source}")
-                         with col2:
-                             st.caption(timestamp[:16] if timestamp else 'N/A')
-                     
-                     # Show more in expander if there are more items
-                     if len(symbol_news) > display_count:
-                         with st.expander(f"📰 Show {len(symbol_news) - display_count} more news items"):
-                             for item in symbol_news[display_count:]:
-                                 headline = item.get('headline', 'No headline')
-                                 source = item.get('source', 'Unknown')
-                                 url = item.get('url', '')
-                                 sentiment = item.get('sentiment', 'neutral')
-                                 
-                                 # Format sentiment display with emojis only
-                                 if sentiment in ['positive', 'bullish']:
-                                     sentiment_emoji = '🟢'
-                                 elif sentiment in ['negative', 'bearish']:
-                                     sentiment_emoji = '🔴'
-                                 else:
-                                     sentiment_emoji = '⚪'
-                                 
-                                 if url:
-                                     st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji}")
-                                 else:
-                                     st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji}")
+                st.caption(f"🔍 Filter: {filter_type}{url_filter}")
+                
+                if symbol_news:
+                    st.write("#### 📰 Symbol News")
+                    
+                    # Show up to 10 items with an expander for more
+                    display_count = min(10, len(symbol_news))
+                    for i, item in enumerate(symbol_news[:display_count]):
+                        headline = item.get('headline', 'No headline')
+                        source = item.get('source', 'Unknown')
+                        timestamp = item.get('timestamp', '')
+                        url = item.get('url', '')
+                        sentiment = item.get('sentiment', 'neutral')
+                        sentiment_score = item.get('sentiment_score', 0)
+                        
+                        # Format sentiment display with colored text
+                        if sentiment in ['positive', 'bullish']:
+                            sentiment_emoji = '🟢'
+                            sentiment_color = 'green'
+                        elif sentiment in ['negative', 'bearish']:
+                            sentiment_emoji = '🔴'
+                            sentiment_color = 'red'
+                        else:
+                            sentiment_emoji = '⚪'
+                            sentiment_color = 'gray'
+                        
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            # Make headline clickable if URL available
+                            if url:
+                                st.markdown(f"[**{headline[:80]}**]({url}) <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
+                            else:
+                                st.markdown(f"**{headline[:80]}** <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
+                            st.caption(f"📡 {source} | <span style='color:{sentiment_color};'>{sentiment.capitalize()}</span>")
+                        with col2:
+                            st.caption(timestamp[:16] if timestamp else 'N/A')
+                    
+                    # Show more in expander if there are more items
+                    if len(symbol_news) > display_count:
+                        with st.expander(f"📰 Show {len(symbol_news) - display_count} more news items"):
+                            for item in symbol_news[display_count:]:
+                                headline = item.get('headline', 'No headline')
+                                source = item.get('source', 'Unknown')
+                                url = item.get('url', '')
+                                sentiment = item.get('sentiment', 'neutral')
+                                
+                                # Format sentiment display with colored text
+                                if sentiment in ['positive', 'bullish']:
+                                    sentiment_color = 'green'
+                                elif sentiment in ['negative', 'bearish']:
+                                    sentiment_color = 'red'
+                                else:
+                                    sentiment_color = 'gray'
+                                
+                                if url:
+                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
+                                else:
+                                    st.markdown(f"• {headline[:60]}... - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
