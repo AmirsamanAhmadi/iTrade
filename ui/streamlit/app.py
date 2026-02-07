@@ -449,7 +449,8 @@ if mds:
 
         c1, c2 = st.columns(2)
         with c1:
-            analyze_btn = st.button("📊 Analyze & Get Signals", type="primary")
+            if st.button("📊 Analyze & Get Signals", type="primary"):
+                st.session_state.analyze_triggered = True
         with c2:
             if st.button("💾 Save Settings"):
                 st.session_state.cfg["default_symbol"] = symbol
@@ -595,7 +596,8 @@ if mds:
             st.warning("📡 Live price data unavailable")
     
     # Chart with current analysis
-    if fetch_btn or 'last_analysis' in st.session_state:
+    analyze_triggered = st.session_state.get('analyze_triggered', False)
+    if analyze_triggered or 'last_analysis' in st.session_state:
         with st.spinner(f"📊 Analyzing {symbol}..."):
             try:
                 end = datetime.utcnow().date().isoformat()
