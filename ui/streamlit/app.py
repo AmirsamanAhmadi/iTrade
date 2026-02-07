@@ -323,16 +323,15 @@ def generate_trading_signal(df, current_price):
     except Exception as e:
         return {'action': 'HOLD', 'reason': f'Error: {str(e)}', 'confidence': 0}
 
-def get_recommended_positions(symbols, current_df, current_price):
-    """Get recommended positions across multiple symbols"""
+def get_recommended_positions(symbols, current_df, current_price, account_balance=10000, risk_per_trade=2.0, stop_loss_pct=2.0, take_profit_pct=5.0):
+    """Get multiple recommended positions at different price points for each symbol"""
     recommendations = []
     
-    for symbol in symbols[:10]:  # Limit to 10 for performance
+    for symbol in symbols:
         try:
-            # Quick analysis for each symbol
             if mds:
                 end = datetime.utcnow().date().isoformat()
-                start = (datetime.utcnow().date() - pd.Timedelta(days=3)).isoformat()
+                start = (datetime.utcnow().date() - pd.Timedelta(days=7)).isoformat()
                 symbol_df = mds.fetch_ohlc(symbol, "1h", start=start, end=end)
                 
                 if symbol_df is not None and not symbol_df.empty:
@@ -340,35 +339,130 @@ def get_recommended_positions(symbols, current_df, current_price):
                     symbol_rsi = calculate_rsi(symbol_df['Close'])
                     latest_rsi = symbol_rsi.iloc[-1] if not symbol_rsi.empty else 50
                     
-                    # Simple recommendation logic
+                    # Calculate position size
+                    position_size = account_balance * risk_per_trade / 100
+                    
+                    # Estimate close time based on historical movement
+                    avg_hourly_move = symbol_df['Close'].pct_change().abs().mean() * 100
+                    if avg_hourly_move > 0:
+                        hours_to_tp = min(take_profit_pct / avg_hourly_move, 168)
+                        hours_to_sl = min(stop_loss_pct / avg_hourly_move, 72)
+                    else:
+                        hours_to_tp = 24
+                        hours_to_sl = 12
+                    
+                    est_open = "1-4 hrs"
+                    est_close = f"{max(1, int(hours_to_tp))}-{max(2, int(hours_to_tp * 1.5))} hrs"
+                    
+                    # Generate multiple price points based on signal type
                     if latest_rsi < 35:
                         signal_text = "BUY"
-                        entry_price = symbol_price * 0.998  # Slightly below market
-                        stop_loss = symbol_price * 0.98  # 2% SL
+                        # Generate 3 BUY options at different pullback levels
+                        price_levels = [0.995, 0.99, 0.985, 0.98]  # 0.5%, 1%, 1.5%, 2% below current
+                        for level_idx, level in enumerate(price_levels):
+                            entry_price = symbol_price * level
+                            sl_price = entry_price * (1 - stop_loss_pct/100)
+                            tp_price = entry_price * (1 + take_profit_pct/100)
+                            liquidation_price = entry_price - (position_size * stop_loss_pct/100 * entry_price / 100)
+                            
+                            # Risk/reward amounts
+                            risk_amount = position_size * stop_loss_pct / 100
+                            reward_amount = position_size * take_profit_pct / 100
+                            
+                            # Confidence increases for deeper pullbacks
+                            confidence = min(95, 50 + (35 - latest_rsi) * 1.5 + level_idx * 5)
+                            
+                            recommendations.append({
+                                'symbol': symbol,
+                                'price': symbol_price,
+                                'signal': signal_text,
+                                'entry': entry_price,
+                                'stop_loss': sl_price,
+                                'take_profit': tp_price,
+                                'liquidation': liquidation_price,
+                                'rsi': latest_rsi,
+                                'position_size': position_size,
+                                'risk_amount': risk_amount,
+                                'reward_amount': reward_amount,
+                                'est_open': est_open,
+                                'est_close': est_close,
+                                'confidence': confidence,
+                                'level': level_idx + 1,
+                                'price_distance': f"-{(1-level)*100:.1f}%"
+                            })
+                    
                     elif latest_rsi > 65:
                         signal_text = "SELL"
-                        entry_price = symbol_price * 1.002  # Slightly above market
-                        stop_loss = symbol_price * 1.02  # 2% SL
+                        # Generate 3 SELL options at different overbought levels
+                        price_levels = [1.005, 1.01, 1.015, 1.02]  # 0.5%, 1%, 1.5%, 2% above current
+                        for level_idx, level in enumerate(price_levels):
+                            entry_price = symbol_price * level
+                            sl_price = entry_price * (1 + stop_loss_pct/100)
+                            tp_price = entry_price * (1 - take_profit_pct/100)
+                            liquidation_price = entry_price + (position_size * stop_loss_pct/100 * entry_price / 100)
+                            
+                            risk_amount = position_size * stop_loss_pct / 100
+                            reward_amount = position_size * take_profit_pct / 100
+                            
+                            confidence = min(95, 50 + (latest_rsi - 65) * 1.5 + level_idx * 5)
+                            
+                            recommendations.append({
+                                'symbol': symbol,
+                                'price': symbol_price,
+                                'signal': signal_text,
+                                'entry': entry_price,
+                                'stop_loss': sl_price,
+                                'take_profit': tp_price,
+                                'liquidation': liquidation_price,
+                                'rsi': latest_rsi,
+                                'position_size': position_size,
+                                'risk_amount': risk_amount,
+                                'reward_amount': reward_amount,
+                                'est_open': est_open,
+                                'est_close': est_close,
+                                'confidence': confidence,
+                                'level': level_idx + 1,
+                                'price_distance': f"+{(level-1)*100:.1f}%"
+                            })
+                    
                     else:
                         signal_text = "HOLD"
+                        # Generate neutral options at current price
                         entry_price = symbol_price
-                        stop_loss = symbol_price * 0.98
-                    
-                    recommendations.append({
-                        'symbol': symbol,
-                        'price': symbol_price,
-                        'signal': signal_text,
-                        'entry': entry_price,
-                        'stop_loss': stop_loss
-                    })
+                        sl_price = symbol_price * (1 - stop_loss_pct/100)
+                        tp_price = symbol_price * (1 + take_profit_pct/100)
+                        liquidation_price = symbol_price
+                        
+                        risk_amount = position_size * stop_loss_pct / 100
+                        reward_amount = position_size * take_profit_pct / 100
+                        
+                        recommendations.append({
+                            'symbol': symbol,
+                            'price': symbol_price,
+                            'signal': signal_text,
+                            'entry': entry_price,
+                            'stop_loss': sl_price,
+                            'take_profit': tp_price,
+                            'liquidation': liquidation_price,
+                            'rsi': latest_rsi,
+                            'position_size': position_size,
+                            'risk_amount': risk_amount,
+                            'reward_amount': reward_amount,
+                            'est_open': est_open,
+                            'est_close': est_close,
+                            'confidence': 50,
+                            'level': 1,
+                            'price_distance': "0%"
+                        })
+        
         except Exception:
             continue
     
-    # Sort by signal strength (prioritize BUY signals first)
     buy_signals = [r for r in recommendations if r['signal'] == 'BUY']
-    other_signals = [r for r in recommendations if r['signal'] != 'BUY']
+    sell_signals = [r for r in recommendations if r['signal'] == 'SELL']
+    hold_signals = [r for r in recommendations if r['signal'] == 'HOLD']
     
-    return buy_signals + other_signals
+    return buy_signals + sell_signals + hold_signals
 
 # ------------------------
 # Main View
@@ -450,9 +544,9 @@ if mds:
         interval = st.selectbox("Timeframe", intervals, index=intervals.index(default_int) if default_int in intervals else 4)
 
         # Chart data source selection
-        data_source_options = ["Market Data Service (Yahoo Finance)", "FxPro", "Simulated Data"]
+        data_source_options = ["Market Data Service (Yahoo Finance)", "OANDA (Forex & Gold)", "FxPro (Auth Required)", "Simulated Data"]
         default_source = st.session_state.cfg.get("chart_data_source", "Market Data Service (Yahoo Finance)")
-        chart_data_source = st.selectbox("📊 Chart Data Source", data_source_options, 
+        chart_data_source = st.selectbox("📊 Chart Data Source", data_source_options,
                                        index=data_source_options.index(default_source) if default_source in data_source_options else 0)
 
         # Trading configuration
@@ -583,25 +677,120 @@ if mds:
                     else:
                         st.warning("🟡 **HOLD** - Wait for better setup")
                     
-                    # Position Suggestion for selected symbol only
-                    st.write("#### 📈 Recommended Positions to Monitor")
-                    # Only analyze the SELECTED symbol
-                    recommended_positions = get_recommended_positions([symbol], df, latest_price)
+                    # Position Suggestion - Multiple symbols (full width)
+                    st.write("---")
+                    st.write("### 📈 Recommended Positions to Monitor")
+                    
+                    # Get recommendations for selected symbol only
+                    recommended_positions = get_recommended_positions(
+                        [symbol], df, latest_price,
+                        account_balance=account_balance,
+                        risk_per_trade=risk_per_trade,
+                        stop_loss_pct=stop_loss_pct,
+                        take_profit_pct=take_profit_pct
+                    )
                     
                     if recommended_positions:
-                        st.info(f"💡 Showing recommendation for selected symbol: {symbol}")
-                        for rec in recommended_positions[:3]:  # Show top 3 for selected symbol
-                            rec_col1, rec_col2, rec_col3, rec_col4 = st.columns(4)
-                            with rec_col1:
-                                st.metric(rec['symbol'], f"${rec['price']:.4f}")
-                            with rec_col2:
-                                st.metric("Signal", rec['signal'])
-                            with rec_col3:
-                                st.metric("Entry", f"${rec['entry']:.4f}")
-                            with rec_col4:
-                                st.metric("SL", f"${rec['stop_loss']:.4f}")
+                        buy_recs = [r for r in recommended_positions if r['signal'] == 'BUY']
+                        sell_recs = [r for r in recommended_positions if r['signal'] == 'SELL']
+                        hold_recs = [r for r in recommended_positions if r['signal'] == 'HOLD']
+                        
+                        if buy_recs:
+                            with st.expander(f"🟢 BUY Opportunities ({len(buy_recs)})", expanded=True):
+                                for rec in buy_recs[:8]:
+                                    with st.container():
+                                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | Entry: **{rec['price_distance']}** | 🎯 Confidence: **{rec.get('confidence', 70):.0f}%**</small>", unsafe_allow_html=True)
+                                        
+                                        m_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
+                                        with m_cols[0]:
+                                            st.metric("Position Size", f"${rec['position_size']:.2f}")
+                                        with m_cols[1]:
+                                            st.metric("Entry", f"${rec['entry']:.4f}")
+                                        with m_cols[2]:
+                                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}", delta=f"-{stop_loss_pct:.1f}%")
+                                        with m_cols[3]:
+                                            st.metric("Take Profit", f"${rec['take_profit']:.4f}", delta=f"+{take_profit_pct:.1f}%")
+                                        with m_cols[4]:
+                                            st.metric("Liquidation", f"${rec['liquidation']:.4f}", delta_color="inverse")
+                                        with m_cols[5]:
+                                            st.metric("Risk/Reward", f"${rec['risk_amount']:.2f}/${rec['reward_amount']:.2f}")
+                                        with m_cols[6]:
+                                            st.metric("Est. Time", f"{rec['est_close']}")
+                                        
+                                        t_cols = st.columns(4)
+                                        with t_cols[0]:
+                                            st.caption(f"⏱️ Open: {rec['est_open']}")
+                                        with t_cols[1]:
+                                            st.caption(f"🎯 Close at TP: {rec['est_close']}")
+                                        with t_cols[2]:
+                                            st.metric("Est. Profit", f"+${rec['reward_amount']:.2f}")
+                                        with t_cols[3]:
+                                            if st.button(f"Trade {rec['symbol']} L{rec['level']}", key=f"buy_{rec['symbol']}_L{rec['level']}"):
+                                                st.session_state.selected_symbol = rec['symbol']
+                                                st.rerun()
+                                        st.divider()
+                        
+                        if sell_recs:
+                            with st.expander(f"🔴 SELL Opportunities ({len(sell_recs)})", expanded=False):
+                                for rec in sell_recs[:5]:
+                                    with st.container():
+                                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | Entry: **{rec['price_distance']}** | 🎯 Confidence: **{rec.get('confidence', 70):.0f}%**</small>", unsafe_allow_html=True)
+                                        
+                                        m_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
+                                        with m_cols[0]:
+                                            st.metric("Position Size", f"${rec['position_size']:.2f}")
+                                        with m_cols[1]:
+                                            st.metric("Entry", f"${rec['entry']:.4f}")
+                                        with m_cols[2]:
+                                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}", delta=f"+{stop_loss_pct:.1f}%")
+                                        with m_cols[3]:
+                                            st.metric("Take Profit", f"${rec['take_profit']:.4f}", delta=f"-{take_profit_pct:.1f}%")
+                                        with m_cols[4]:
+                                            st.metric("Liquidation", f"${rec['liquidation']:.4f}", delta_color="inverse")
+                                        with m_cols[5]:
+                                            st.metric("Risk/Reward", f"${rec['risk_amount']:.2f}/${rec['reward_amount']:.2f}")
+                                        with m_cols[6]:
+                                            st.metric("Est. Time", f"{rec['est_close']}")
+                                        
+                                        t_cols = st.columns(4)
+                                        with t_cols[0]:
+                                            st.caption(f"⏱️ Open: {rec['est_open']}")
+                                        with t_cols[1]:
+                                            st.caption(f"🎯 Close at TP: {rec['est_close']}")
+                                        with t_cols[2]:
+                                            st.metric("Est. Profit", f"+${rec['reward_amount']:.2f}")
+                                        with t_cols[3]:
+                                            if st.button(f"Trade {rec['symbol']} L{rec['level']}", key=f"sell_{rec['symbol']}_L{rec['level']}"):
+                                                st.session_state.selected_symbol = rec['symbol']
+                                                st.rerun()
+                                        st.divider()
+                        
+                        if hold_recs:
+                            with st.expander(f"⚪ HOLD/Neutral ({len(hold_recs)})", expanded=False):
+                                for rec in hold_recs[:5]:
+                                    with st.container():
+                                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | 📊 RSI: **{rec['rsi']:.1f}**</small>", unsafe_allow_html=True)
+                                        
+                                        m_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
+                                        with m_cols[0]:
+                                            st.metric("Position Size", f"${rec['position_size']:.2f}")
+                                        with m_cols[1]:
+                                            st.metric("Entry", f"${rec['entry']:.4f}")
+                                        with m_cols[2]:
+                                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}")
+                                        with m_cols[3]:
+                                            st.metric("Take Profit", f"${rec['take_profit']:.4f}")
+                                        with m_cols[4]:
+                                            st.metric("Liquidation", f"${rec['liquidation']:.4f}")
+                                        with m_cols[5]:
+                                            st.metric("Est. Time", f"{rec['est_close']}")
+                                        with m_cols[6]:
+                                            if st.button(f"Trade {rec['symbol']}", key=f"hold_{rec['symbol']}"):
+                                                st.session_state.selected_symbol = rec['symbol']
+                                                st.rerun()
+                                        st.divider()
                     else:
-                        st.info(f"ℹ️ No clear signal for {symbol} - market in neutral zone")
+                        st.info(f"ℹ️ No clear signals for {symbol}")
                     
                 else:
                     st.error(f"❌ No data available for {symbol}")
@@ -624,14 +813,31 @@ if mds:
                     df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
                     if df is not None:
                         st.success(f"📊 Using {chart_data_source}")
-                elif chart_data_source == "FxPro":
-                    # Try FxPro first for forex pairs
-                    if hasattr(mds, 'fetch_fxpro_ohlc'):
-                        df = mds.fetch_fxpro_ohlc(symbol, interval, start=start, end=end)
+                elif chart_data_source == "OANDA (Forex & Gold)":
+                    # Use OANDA for forex and precious metals
+                    if hasattr(mds, 'fetch_oanda_ohlc'):
+                        df = mds.fetch_oanda_ohlc(symbol, interval, start=start, end=end)
                         if df is not None and not df.empty:
-                            st.success(f"📊 Using FxPro data")
+                            st.success(f"📊 Using OANDA data (Forex & Gold specialist)")
                         else:
-                            st.warning("FxPro unavailable, falling back to Yahoo Finance")
+                            st.warning("OANDA unavailable, falling back to Yahoo Finance")
+                            df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                    else:
+                        st.warning("OANDA not available, using Yahoo Finance")
+                        df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                elif chart_data_source == "FxPro (Auth Required)":
+                    # Use FxPro with API key from .env
+                    if hasattr(mds, 'fetch_fxpro_ohlc'):
+                        fxpro_api_key = os.environ.get('FXPRO_API_KEY', '')
+                        if fxpro_api_key:
+                            df = mds.fetch_fxpro_ohlc(symbol, interval, start=start, end=end)
+                            if df is not None and not df.empty:
+                                st.success(f"📊 Using FxPro data")
+                            else:
+                                st.warning("FxPro returned no data, falling back to Yahoo Finance")
+                                df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
+                        else:
+                            st.warning("FxPro API key not found. Set FXPRO_API_KEY in .env file")
                             df = mds.fetch_ohlc(symbol, interval, start=start, end=end)
                     else:
                         st.warning("FxPro not available, using Yahoo Finance")
@@ -647,7 +853,7 @@ if mds:
                         change = np.random.normal(0, base_price * 0.01)
                         prices.append(max(base_price + change, 1.0))
                         base_price = prices[-1]
-                    
+
                     df = pd.DataFrame({
                         'Open': prices,
                         'High': [p * 1.01 for p in prices],
@@ -688,12 +894,9 @@ if mds:
                         df_viz = df_viz.rename(columns={time_col: 'time'})
                         
                         # Calculate OHLC for candlestick chart
-                        df_viz['color'] = alt.condition(
-                            alt.datum.Close >= alt.datum.Open,
-                            alt.value('#26a69a'),  # Green for bullish
-                            alt.value('#ef5350')   # Red for bearish
-                        )
-                        
+                        df_viz['is_bullish'] = df_viz['Close'] >= df_viz['Open']
+                        df_viz['color'] = df_viz['is_bullish'].map({True: '#26a69a', False: '#ef5350'})
+
                         # Create candlestick chart
                         base = alt.Chart(df_viz).encode(
                             x=alt.X('time:T', title='Time'),
@@ -704,20 +907,20 @@ if mds:
                                 alt.Tooltip('Low:Q', title='Low', format='$,.5f'),
                                 alt.Tooltip('Close:Q', title='Close', format='$,.5f'),
                             ]
-                        ).properties(height=400, width='container')
-                        
+                        ).properties(height=600, width='container')
+
                         # Candlestick body (Open-Close rectangle)
                         candles = base.mark_bar(size=3).encode(
                             y='Open:Q',
                             y2='Close:Q',
-                            color=alt.Color('color:N', legend=None)
+                            color=alt.Color('color:N', legend=None, scale=None)
                         )
-                        
+
                         # Candlestick wicks (High-Low line)
                         wicks = base.mark_rule(strokeWidth=1).encode(
                             y='Low:Q',
                             y2='High:Q',
-                            color=alt.Color('color:N', legend=None)
+                            color=alt.Color('color:N', legend=None, scale=None)
                         )
                         
                         # Moving averages
@@ -741,8 +944,9 @@ if mds:
                                     sl_price = entry_price * (1 - sl_pct)
                                     tp_price = entry_price * (1 + tp_pct)
                                     
-                                    # Calculate liquidation price
-                                    liquidation_price = entry_price - (account_balance * sl_pct)
+                                    # Calculate liquidation price (based on position size, not full balance)
+                                    position_size = (analysis.get('account_balance', 10000) * analysis.get('risk_per_trade', 2.0) / 100)
+                                    liquidation_price = entry_price - (position_size * sl_pct * entry_price / 100)
                                     
                                     entry_level = alt.Chart(pd.DataFrame({
                                         'time': df_viz['time'].iloc[-1],
@@ -782,19 +986,19 @@ if mds:
                                     
                                     chart_layers.extend([entry_level, sl_level, tp_level, liq_level])
                                     
-                                    st.info(f"🟢 **BUY SETUP**")
-                                    st.write(f"• **Entry Price**: ${entry_price:.5f}")
-                                    st.write(f"• **Stop Loss**: ${sl_price:.5f} (risk: {sl_pct*100:.1f}%)")
-                                    st.write(f"• **Take Profit**: ${tp_price:.5f} (target: {tp_pct*100:.1f}%)")
-                                    st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
+                                    st.success("🟢 **BUY SETUP**")
+                                    st.markdown(f"### 💰 **Liquidation Price: ${liquidation_price:.5f}**")
+                                    st.write(f"**Entry:** ${entry_price:.5f} | **Stop Loss:** ${sl_price:.5f} | **Take Profit:** ${tp_price:.5f}")
+                                    st.write(f"**Risk:** {sl_pct*100:.1f}% | **Target:** {tp_pct*100:.1f}% | **Margin Call Level**")
                                     
                                 elif analysis.get('signal', {}).get('action') == 'SELL':
                                     entry_price = current_price * (1 + 0.002)  # Slightly above current
                                     sl_price = entry_price * (1 + sl_pct)
                                     tp_price = entry_price * (1 - tp_pct)
                                     
-                                    # Calculate liquidation price
-                                    liquidation_price = entry_price + (account_balance * sl_pct)
+                                    # Calculate liquidation price (based on position size)
+                                    position_size = (analysis.get('account_balance', 10000) * analysis.get('risk_per_trade', 2.0) / 100)
+                                    liquidation_price = entry_price + (position_size * sl_pct * entry_price / 100)
                                     
                                     entry_level = alt.Chart(pd.DataFrame({
                                         'time': df_viz['time'].iloc[-1],
@@ -816,22 +1020,51 @@ if mds:
                                     
                                     chart_layers.append(entry_level)
                                     chart_layers.append(liq_level)
-                                    
-                                    st.error(f"🔴 **SELL SETUP**")
-                                    st.write(f"• **Exit Price**: ${entry_price:.5f}")
-                                    st.write(f"• **Stop Loss**: ${tp_price:.5f}")
-                                    st.write(f"• **Take Profit**: ${sl_price:.5f}")
-                                    st.write(f"• **Liquidation Price**: ${liquidation_price:.5f} (margin call level)")
-                                    
-                                    st.error(f"🔴 **SELL SETUP**")
-                                    st.write(f"• **Exit Price**: ${entry_price:.5f}")
-                                    st.write(f"• **Stop Loss**: ${tp_price:.5f}")
-                                    st.write(f"• **Take Profit**: ${sl_price:.5f}")
 
-                        # Combine charts
+                                    st.error("🔴 **SELL SETUP**")
+                                    st.markdown(f"### 💰 **Liquidation Price: ${liquidation_price:.5f}**")
+                                    st.write(f"**Entry:** ${entry_price:.5f} | **Stop Loss:** ${tp_price:.5f} | **Take Profit:** ${sl_price:.5f}")
+                                    st.write(f"**Risk:** {sl_pct*100:.1f}% | **Target:** {tp_pct*100:.1f}% | **Margin Call Level**")
+
+                        # Calculate y-axis domain including all levels
+                        y_min = float(df_viz[['Low', 'MA20', 'MA50']].min().min())
+                        y_max = float(df_viz[['High', 'MA20', 'MA50']].max().max())
+                        
+                        # Add liquidation/levels to price range
+                        if 'last_analysis' in st.session_state:
+                            analysis = st.session_state.last_analysis
+                            if analysis.get('symbol') == symbol:
+                                current_price = latest_price
+                                risk_pct = analysis.get('risk_per_trade', 2.0) / 100
+                                sl_pct = analysis.get('stop_loss_pct', 2.0) / 100
+                                tp_pct = analysis.get('take_profit_pct', 5.0) / 100
+                                position_size = (analysis.get('account_balance', 10000) * risk_pct)
+                                
+                                if analysis.get('signal', {}).get('action') == 'BUY':
+                                    entry_price = current_price * (1 - 0.002)
+                                    sl_price = entry_price * (1 - sl_pct)
+                                    tp_price = entry_price * (1 + tp_pct)
+                                    liquidation_price = entry_price - (position_size * sl_pct * entry_price / 100)
+                                    y_min = min(y_min, sl_price, liquidation_price)
+                                    y_max = max(y_max, tp_price, entry_price)
+                                elif analysis.get('signal', {}).get('action') == 'SELL':
+                                    entry_price = current_price * (1 + 0.002)
+                                    sl_price = entry_price * (1 + sl_pct)
+                                    tp_price = entry_price * (1 - tp_pct)
+                                    liquidation_price = entry_price + (position_size * sl_pct * entry_price / 100)
+                                    y_min = min(y_min, tp_price, entry_price)
+                                    y_max = max(y_max, sl_price, liquidation_price)
+                        
+                        y_padding = (y_max - y_min) * 0.1
+                        
                         chart = alt.layer(*chart_layers).interactive().properties(
                             title=f'📈 {symbol} - Candlestick Chart ({interval})',
-                            height=400, width='container'
+                            height=600, width='container'
+                        )
+                        
+                        # Apply y-domain scaling
+                        chart = chart.encode(
+                            y=alt.Y(scale=alt.Scale(domain=[y_min - y_padding, y_max + y_padding]))
                         )
                         
                         st.altair_chart(chart, use_container_width=True)
@@ -1826,19 +2059,17 @@ if st.session_state.trading_data.get('current_symbol'):
                             sentiment_color = 'green'
                         elif sentiment in ['negative', 'bearish']:
                             sentiment_emoji = '🔴'
-                            sentiment_color = 'red'
                         else:
                             sentiment_emoji = '⚪'
-                            sentiment_color = 'gray'
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             # Make headline clickable if URL available
                             if url:
-                                st.markdown(f"[**{headline[:80]}**]({url}) <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
+                                st.markdown(f"[**{headline[:80]}**]({url}) {sentiment_emoji}")
                             else:
-                                st.markdown(f"**{headline[:80]}** <span style='color:{sentiment_color};font-weight:bold;'> {sentiment_emoji}</span>")
-                            st.caption(f"📡 {source} | <span style='color:{sentiment_color};'>{sentiment.capitalize()}</span>")
+                                st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
+                            st.caption(f"📡 {source} | {sentiment.capitalize()}")
                         with col2:
                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
@@ -1851,18 +2082,18 @@ if st.session_state.trading_data.get('current_symbol'):
                                 url = item.get('url', '')
                                 sentiment = item.get('sentiment', 'neutral')
                                 
-                                # Format sentiment display with colored text
+                                # Format sentiment display
                                 if sentiment in ['positive', 'bullish']:
-                                    sentiment_color = 'green'
+                                    sentiment_emoji = '🟢'
                                 elif sentiment in ['negative', 'bearish']:
-                                    sentiment_color = 'red'
+                                    sentiment_emoji = '🔴'
                                 else:
-                                    sentiment_color = 'gray'
+                                    sentiment_emoji = '⚪'
                                 
                                 if url:
-                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
+                                    st.markdown(f"• [{headline[:60]}...]({url}) - *{source}* {sentiment_emoji} | {sentiment.upper()}")
                                 else:
-                                    st.markdown(f"• {headline[:60]}... - *{source}* <span style='color:{sentiment_color};font-weight:bold;'> | {sentiment.upper()}</span>")
+                                    st.markdown(f"• {headline[:60]}... - *{source}* {sentiment_emoji} | {sentiment.upper()}")
                     
                     # Show metrics
                     col1, col2, col3 = st.columns(3)
