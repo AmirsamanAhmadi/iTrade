@@ -677,11 +677,8 @@ if mds:
                     else:
                         st.warning("🟡 **HOLD** - Wait for better setup")
                     
-                    # Position Suggestion - Multiple symbols (full width)
-                    st.write("---")
-                    st.markdown("<small style='font-size:16px'>📈 **Recommended Positions to Monitor**</small>", unsafe_allow_html=True)
-                    
-                    # Get recommendations for selected symbol only
+                    # Position Suggestion - collect recommendations and render full-width below
+                    # Get recommendations for selected symbol only and store in session state
                     recommended_positions = get_recommended_positions(
                         [symbol], df, latest_price,
                         account_balance=account_balance,
@@ -689,114 +686,67 @@ if mds:
                         stop_loss_pct=stop_loss_pct,
                         take_profit_pct=take_profit_pct
                     )
-                    
-                    if recommended_positions:
-                        buy_recs = [r for r in recommended_positions if r['signal'] == 'BUY']
-                        sell_recs = [r for r in recommended_positions if r['signal'] == 'SELL']
-                        hold_recs = [r for r in recommended_positions if r['signal'] == 'HOLD']
-                        
-                        if buy_recs:
-                            with st.expander(f"🟢 BUY Opportunities ({len(buy_recs)})", expanded=True):
-                                for rec in buy_recs[:8]:
-                                    with st.container():
-                                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | Entry: **{rec['price_distance']}** | 🎯 Confidence: **{rec.get('confidence', 70):.0f}%**</small>", unsafe_allow_html=True)
-                                        
-                                        m_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
-                                        with m_cols[0]:
-                                            st.metric("Position Size", f"${rec['position_size']:.2f}")
-                                        with m_cols[1]:
-                                            st.metric("Entry", f"${rec['entry']:.4f}")
-                                        with m_cols[2]:
-                                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}", delta=f"-{stop_loss_pct:.1f}%")
-                                        with m_cols[3]:
-                                            st.metric("Take Profit", f"${rec['take_profit']:.4f}", delta=f"+{take_profit_pct:.1f}%")
-                                        with m_cols[4]:
-                                            st.metric("Liquidation", f"${rec['liquidation']:.4f}", delta_color="inverse")
-                                        with m_cols[5]:
-                                            st.metric("Risk/Reward", f"${rec['risk_amount']:.2f}/${rec['reward_amount']:.2f}")
-                                        with m_cols[6]:
-                                            st.metric("Est. Time", f"{rec['est_close']}")
-                                        
-                                        t_cols = st.columns(4)
-                                        with t_cols[0]:
-                                            st.caption(f"⏱️ Open: {rec['est_open']}")
-                                        with t_cols[1]:
-                                            st.caption(f"🎯 Close at TP: {rec['est_close']}")
-                                        with t_cols[2]:
-                                            st.metric("Est. Profit", f"+${rec['reward_amount']:.2f}")
-                                        with t_cols[3]:
-                                            if st.button(f"Trade {rec['symbol']} L{rec['level']}", key=f"buy_{rec['symbol']}_L{rec['level']}"):
-                                                st.session_state.selected_symbol = rec['symbol']
-                                                st.rerun()
-                                        st.divider()
-                        
-                        if sell_recs:
-                            with st.expander(f"🔴 SELL Opportunities ({len(sell_recs)})", expanded=False):
-                                for rec in sell_recs[:5]:
-                                    with st.container():
-                                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | Entry: **{rec['price_distance']}** | 🎯 Confidence: **{rec.get('confidence', 70):.0f}%**</small>", unsafe_allow_html=True)
-                                        
-                                        m_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
-                                        with m_cols[0]:
-                                            st.metric("Position Size", f"${rec['position_size']:.2f}")
-                                        with m_cols[1]:
-                                            st.metric("Entry", f"${rec['entry']:.4f}")
-                                        with m_cols[2]:
-                                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}", delta=f"+{stop_loss_pct:.1f}%")
-                                        with m_cols[3]:
-                                            st.metric("Take Profit", f"${rec['take_profit']:.4f}", delta=f"-{take_profit_pct:.1f}%")
-                                        with m_cols[4]:
-                                            st.metric("Liquidation", f"${rec['liquidation']:.4f}", delta_color="inverse")
-                                        with m_cols[5]:
-                                            st.metric("Risk/Reward", f"${rec['risk_amount']:.2f}/${rec['reward_amount']:.2f}")
-                                        with m_cols[6]:
-                                            st.metric("Est. Time", f"{rec['est_close']}")
-                                        
-                                        t_cols = st.columns(4)
-                                        with t_cols[0]:
-                                            st.caption(f"⏱️ Open: {rec['est_open']}")
-                                        with t_cols[1]:
-                                            st.caption(f"🎯 Close at TP: {rec['est_close']}")
-                                        with t_cols[2]:
-                                            st.metric("Est. Profit", f"+${rec['reward_amount']:.2f}")
-                                        with t_cols[3]:
-                                            if st.button(f"Trade {rec['symbol']} L{rec['level']}", key=f"sell_{rec['symbol']}_L{rec['level']}"):
-                                                st.session_state.selected_symbol = rec['symbol']
-                                                st.rerun()
-                                        st.divider()
-                        
-                        if hold_recs:
-                            with st.expander(f"⚪ HOLD/Neutral ({len(hold_recs)})", expanded=False):
-                                for rec in hold_recs[:5]:
-                                    with st.container():
-                                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | 📊 RSI: **{rec['rsi']:.1f}**</small>", unsafe_allow_html=True)
-                                        
-                                        m_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
-                                        with m_cols[0]:
-                                            st.metric("Position Size", f"${rec['position_size']:.2f}")
-                                        with m_cols[1]:
-                                            st.metric("Entry", f"${rec['entry']:.4f}")
-                                        with m_cols[2]:
-                                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}")
-                                        with m_cols[3]:
-                                            st.metric("Take Profit", f"${rec['take_profit']:.4f}")
-                                        with m_cols[4]:
-                                            st.metric("Liquidation", f"${rec['liquidation']:.4f}")
-                                        with m_cols[5]:
-                                            st.metric("Est. Time", f"{rec['est_close']}")
-                                        with m_cols[6]:
-                                            if st.button(f"Trade {rec['symbol']}", key=f"hold_{rec['symbol']}"):
-                                                st.session_state.selected_symbol = rec['symbol']
-                                                st.rerun()
-                                        st.divider()
-                    else:
-                        st.info(f"ℹ️ No clear signals for {symbol}")
+                    st.session_state.temp_recs = recommended_positions
                     
                 else:
                     st.error(f"❌ No data available for {symbol}")
                     
             except Exception as e:
                 st.error(f"❌ Analysis failed: {e}")
+
+# Render recommendations at full page width (outside the right-hand column)
+if st.session_state.get('temp_recs'):
+    recommended_positions = st.session_state.pop('temp_recs')
+    st.write("---")
+    st.markdown("#### 📈 Recommended Positions to Monitor")
+
+    if recommended_positions:
+        buy_recs = [r for r in recommended_positions if r['signal'] == 'BUY']
+        sell_recs = [r for r in recommended_positions if r['signal'] == 'SELL']
+        hold_recs = [r for r in recommended_positions if r['signal'] == 'HOLD']
+
+        def render_recs(title, recs, expanded=False):
+            if not recs:
+                return
+            with st.expander(f"{title} ({len(recs)})", expanded=expanded):
+                for rec in recs:
+                    with st.container():
+                        st.markdown(f"<small>**{rec['symbol']}** | 💰 **${rec['price']:.4f}** | Entry: **{rec['price_distance']}** | 🎯 Confidence: **{rec.get('confidence', 70):.0f}%**</small>", unsafe_allow_html=True)
+                        # Wider column layout across full page
+                        m_cols = st.columns([3, 2, 2, 2, 2, 2, 2])
+                        with m_cols[0]:
+                            st.metric("Position Size", f"${rec['position_size']:.2f}")
+                        with m_cols[1]:
+                            st.metric("Entry", f"${rec['entry']:.4f}")
+                        with m_cols[2]:
+                            st.metric("Stop Loss", f"${rec['stop_loss']:.4f}")
+                        with m_cols[3]:
+                            st.metric("Take Profit", f"${rec['take_profit']:.4f}")
+                        with m_cols[4]:
+                            st.metric("Liquidation", f"${rec['liquidation']:.4f}")
+                        with m_cols[5]:
+                            st.metric("Risk/Reward", f"${rec['risk_amount']:.2f}/${rec['reward_amount']:.2f}")
+                        with m_cols[6]:
+                            st.metric("Est. Time", f"{rec['est_close']}")
+
+                        t_cols = st.columns([2, 2, 2, 1])
+                        with t_cols[0]:
+                            st.caption(f"⏱️ Open: {rec['est_open']}")
+                        with t_cols[1]:
+                            st.caption(f"🎯 Close at TP: {rec['est_close']}")
+                        with t_cols[2]:
+                            st.metric("Est. Profit", f"+${rec['reward_amount']:.2f}")
+                        with t_cols[3]:
+                            if st.button(f"Trade {rec['symbol']} L{rec.get('level','')}", key=f"trade_full_{rec['symbol']}_L{rec.get('level','')}"):
+                                st.session_state.selected_symbol = rec['symbol']
+                                st.rerun()
+                        st.divider()
+
+        render_recs("🟢 BUY Opportunities", buy_recs, expanded=True)
+        render_recs("🔴 SELL Opportunities", sell_recs, expanded=False)
+        render_recs("⚪ HOLD/Neutral", hold_recs, expanded=False)
+    else:
+        st.info("ℹ️ No clear signals to display")
 
     # Real-time price display and trading chart
     
