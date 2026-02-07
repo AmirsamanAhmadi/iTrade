@@ -1565,7 +1565,8 @@ if st.session_state.trading_data.get('current_symbol'):
         # Display symbol-specific news
         try:
             from services.news_service import NEWS_DB
-            news_items = _load_recent_news(NEWS_DB, days=3, limit=10)
+            # Load more news items (increased from 10 to 100 to show more results)
+            news_items = _load_recent_news(NEWS_DB, days=7, limit=100)
             
             if news_items:
                 # Parse symbol to extract actual company/asset name
@@ -1687,24 +1688,61 @@ if st.session_state.trading_data.get('current_symbol'):
                     if any(keyword in headline for keyword in keywords):
                         symbol_news.append(item)
                 
+                # Show summary
+                st.write(f"**📊 Found {len(symbol_news)} news items for {current_symbol} (out of {len(news_items)} total)**")
+                st.caption(f"🔍 Keywords searched: {', '.join(keywords)}")
+                
                 if symbol_news:
                     st.write("#### 📰 Symbol News")
-                    for item in symbol_news[:3]:  # Show top 3
+                    
+                    # Show up to 10 items with an expander for more
+                    display_count = min(10, len(symbol_news))
+                    for i, item in enumerate(symbol_news[:display_count]):
                         headline = item.get('headline', 'No headline')
                         source = item.get('source', 'Unknown')
                         timestamp = item.get('timestamp', '')
+                        url = item.get('url', '')
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.write("**" + f"{headline[:80]}" + "**")
+                            # Make headline clickable if URL available
+                            if url:
+                                st.write(f"**[{headline[:80]}]({url})**")
+                            else:
+                                st.write("**" + f"{headline[:80]}" + "**")
                             st.caption(f"📡 {source}")
                         with col2:
-                            st.caption(timestamp[:16])
+                            st.caption(timestamp[:16] if timestamp else 'N/A')
                     
-                    st.metric(f"📰 {current_symbol} News", len(symbol_news))
+                    # Show more in expander if there are more items
+                    if len(symbol_news) > display_count:
+                        with st.expander(f"📰 Show {len(symbol_news) - display_count} more news items"):
+                            for item in symbol_news[display_count:]:
+                                headline = item.get('headline', 'No headline')
+                                source = item.get('source', 'Unknown')
+                                url = item.get('url', '')
+                                if url:
+                                    st.write(f"• [{headline[:60]}...]({url}) - *{source}*")
+                                else:
+                                    st.write(f"• {headline[:60]}... - *{source}*")
+                    
+                    # Show metrics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric(f"📰 {current_symbol} News", len(symbol_news))
+                    with col2:
+                        sources = set(item.get('source', '').split(':')[0] for item in symbol_news)
+                        st.metric("📡 Sources", len(sources))
+                    with col3:
+                        # Show sentiment if available
+                        sentiments = [item.get('sentiment', 'neutral') for item in symbol_news if 'sentiment' in item]
+                        if sentiments:
+                            positive = sum(1 for s in sentiments if s in ['positive', 'bullish'])
+                            negative = sum(1 for s in sentiments if s in ['negative', 'bearish'])
+                            st.metric("📊 Sentiment", f"+{positive}/-{negative}")
                 else:
                     st.info(f"No recent news for {current_symbol}")
-                    st.caption(f"🔍 Searched for: {', '.join(keywords)}")
+                    st.caption(f"💡 Try searching with different keywords or check back later")
             else:
                 st.warning("No news data available in database")
         except Exception as e:
