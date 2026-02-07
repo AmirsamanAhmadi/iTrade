@@ -1782,7 +1782,7 @@ if st.session_state.trading_data.get('current_symbol'):
                         source = item.get('source', 'Unknown')
                         timestamp = item.get('timestamp', '')
                         url = item.get('url', '')
-                        sentiment = item.get('sentiment', 'neutral')
+                         sentiment = item.get('sentiment', 'neutral')
                          sentiment_score = item.get('sentiment_score', 0)
                          
                          # Format sentiment display with emojis only
