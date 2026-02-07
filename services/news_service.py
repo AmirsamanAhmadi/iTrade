@@ -706,66 +706,46 @@ class NewsService:
             logger.info("Fetching from Massive Finance News API")
             self._rate_limit('massive')
             
-            # Massive API endpoint
-            url = 'https://api.massive.com/v1/news'
+            # Use official Massive Python library
+            try:
+                from massive import RESTClient
+                from massive.rest.models import TickerNews
+            except ImportError:
+                logger.error("Massive library not installed. Run 'pip install massive'")
+                return results
             
-            headers = {
-                'Authorization': f'Bearer {self.MASSIVE_KEY}',
-                'Content-Type': 'application/json'
-            }
+            client = RESTClient(self.MASSIVE_KEY)
             
-            params = {
-                'limit': 50,
-                'language': 'en',
-                'sort': 'published_desc'
-            }
-            
-            # Add ticker filter if provided
-            if tickers:
-                params['symbols'] = ','.join(tickers[:10])  # Massive supports multiple symbols
-            else:
-                # Default to market news
-                params['category'] = 'markets'
-            
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                for article in data.get('articles', []):
-                    headline = article.get('title', '')
+            # Fetch news
+            for item in client.list_ticker_news(
+                order="asc",
+                limit="50",
+                sort="published_utc",
+            ):
+                if isinstance(item, TickerNews):
+                    headline = item.title
                     if headline:
                         mapped = self._map_to_currencies(headline)
                         
                         # Extract sentiment if available
-                        sentiment = article.get('sentiment', {})
-                        sentiment_label = sentiment.get('label', 'neutral')
-                        sentiment_score = sentiment.get('score', 0)
+                        sentiment_label = getattr(item, 'sentiment', 'neutral')
+                        sentiment_score = getattr(item, 'sentiment_score', 0)
                         
                         results.append({
-                            'timestamp': article.get('published_at', datetime.utcnow().isoformat()),
+                            'timestamp': getattr(item, 'published_utc', datetime.utcnow().isoformat()),
                             'headline': headline,
-                            'source': f"massive:{article.get('source', {}).get('name', 'Massive')}",
+                            'source': 'massive',
                             'mapped_currencies': mapped,
-                            'url': article.get('url', ''),
-                            'description': article.get('summary', ''),
-                            'sentiment': sentiment_label,
-                            'sentiment_score': sentiment_score,
-                            'tickers': article.get('symbols', []),
-                            'category': article.get('category', 'general')
+                            'url': getattr(item, 'article_url', ''),
+                            'description': getattr(item, 'description', ''),
+                            'sentiment': str(sentiment_label) if sentiment_label else 'neutral',
+                            'sentiment_score': float(sentiment_score) if sentiment_score else 0,
+                            'tickers': getattr(item, 'tickers', []),
+                            'category': getattr(item, 'category', 'general')
                         })
-                        
-                logger.info(f"Massive API returned {len(results)} articles")
+            
+            logger.info(f"Massive API returned {len(results)} articles")
                 
-            elif response.status_code == 429:
-                logger.warning("Massive API rate limit reached")
-            else:
-                logger.warning(f"Massive API returned status {response.status_code}: {response.text}")
-                
-        except requests.exceptions.Timeout:
-            logger.error("Massive API request timed out")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Massive API request error: {e}")
         except Exception as e:
             logger.error(f"Massive API error: {e}")
         
