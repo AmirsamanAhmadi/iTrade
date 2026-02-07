@@ -463,7 +463,7 @@ if mds:
     with col_b:
         st.write("#### 🎯 Trading Signals & Position Suggestion")
         
-        if analyze_btn or 'last_analysis' in st.session_state:
+        if st.session_state.get('analyze_triggered', False) or 'last_analysis' in st.session_state:
             try:
                 # Fetch data for analysis
                 end = datetime.utcnow().date().isoformat()
