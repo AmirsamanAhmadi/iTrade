@@ -116,11 +116,14 @@ class MarketDataService:
         res = pd.concat([o, h, l, c, v], axis=1)
         res.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         if fill_method in ('ffill', 'bfill'):
-            res = res.fillna(method=fill_method)
+            if fill_method == 'ffill':
+                res = res.ffill()
+            else:
+                res = res.bfill()
         return res
 
     def _ensure_regular_index(self, df: pd.DataFrame, interval: str, fill_method: Optional[str]) -> pd.DataFrame:
-        freq_map = {'1m': 'T', '15m': '15T', '1h': 'H', '4h': '4H'}
+        freq_map = {'1m': 'min', '15m': '15min', '1h': 'h', '4h': '4h'}
         freq = freq_map[interval]
         start = df.index[0]
         end = df.index[-1]
@@ -131,5 +134,8 @@ class MarketDataService:
         logger.warning(f"Missing bars detected: expected {len(expected_index)} but got {len(df.index)}; reindexing")
         df = df.reindex(expected_index)
         if fill_method in ('ffill', 'bfill'):
-            df = df.fillna(method=fill_method)
+            if fill_method == 'ffill':
+                df = df.ffill()
+            else:
+                df = df.bfill()
         return df
