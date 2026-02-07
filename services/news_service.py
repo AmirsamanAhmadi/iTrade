@@ -28,7 +28,7 @@ class NewsService:
     source: str = 'finviz'
 
     def fetch_headlines(self, tickers: List[str] = None) -> List[Dict]:
-        """Fetch headlines from finviz for supplied tickers (if available) and return list of dicts.
+        """Fetch headlines from finviz and return list of dicts.
 
         Each dict contains: timestamp (ISO), headline, source, mapped_currencies (subset of ['USD','EUR']).
         """
@@ -37,30 +37,39 @@ class NewsService:
             return []
 
         results = []
-        # If no tickers provided, fetch general news if available from finviz
-        tickers = tickers or []
+
         try:
-            if tickers:
-                for t in tickers:
-                    news = FinvizNews(ticker=t)
-                    items = news.news_headlines
-                    for item in items:
-                        ts = item.get('date') or ''
-                        headline = item.get('title') or item.get('text') or ''
-                        mapped = self._map_to_currencies(headline)
-                        rec = {'timestamp': ts, 'headline': headline, 'source': 'finviz', 'mapped_currencies': mapped}
-                        results.append(rec)
-            else:
-                # finvizfinance does not provide global feed easily; return empty list
-                logger.debug('No tickers provided, finviz fetch skipped')
+            # Always fetch general market news from finviz
+            logger.info("Fetching general market news from Finviz")
+            try:
+                news = FinvizNews() # General news
+                news_data = news.get_news()
+                if news_data and 'news' in news_data:
+                    df = news_data['news']
+                    if not df.empty:
+                        for _, row in df.iterrows():
+                            ts = str(row.get('Date', ''))
+                            headline = str(row.get('Title', ''))
+                            mapped = self._map_to_currencies(headline)
+                            rec = {'timestamp': ts, 'headline': headline, 'source': 'finviz_general', 'mapped_currencies': mapped}
+                            results.append(rec)
+            except Exception as e:
+                logger.error(f"Error fetching general news: {e}")
+
         except Exception:
             logger.exception('Failed to fetch headlines from finviz')
 
-        # store raw
+        # store raw and deduplicate
+        seen_headlines = set()
+        unique_results = []
         for r in results:
-            self._store_raw(r)
+            h = r.get('headline')
+            if h and h not in seen_headlines:
+                seen_headlines.add(h)
+                unique_results.append(r)
+                self._store_raw(r)
 
-        return results
+        return unique_results
 
     def _map_to_currencies(self, headline: str) -> List[str]:
         s = headline.lower()
