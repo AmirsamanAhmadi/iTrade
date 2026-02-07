@@ -18,3 +18,4 @@ finvizfinance
 
 # News Service already uses:
 # requests>=2.28.0 (already in requirements)
+python-dotenv>=1.0.0  # For loading .env files
