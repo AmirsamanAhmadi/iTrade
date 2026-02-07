@@ -679,7 +679,7 @@ if mds:
                     
                     # Position Suggestion - Multiple symbols (full width)
                     st.write("---")
-                    st.write("### 📈 Recommended Positions to Monitor")
+                    st.markdown("<small style='font-size:16px'>📈 **Recommended Positions to Monitor**</small>", unsafe_allow_html=True)
                     
                     # Get recommendations for selected symbol only
                     recommended_positions = get_recommended_positions(
