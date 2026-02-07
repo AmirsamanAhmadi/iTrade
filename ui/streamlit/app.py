@@ -1475,7 +1475,47 @@ if st.session_state.trading_data.get('current_symbol'):
         
         current_symbol = st.session_state.trading_data.get('current_symbol', '')
         
-        st.caption("📡 Data Source: News Service (Finviz/Financial News APIs)")
+        # Show available news sources
+        st.write("#### 📡 Available News Sources")
+        
+        # Check which sources are configured
+        source_status = []
+        try:
+            from services.news_service import FINVIZ_AVAILABLE
+            if FINVIZ_AVAILABLE:
+                source_status.append("✅ Finviz")
+            else:
+                source_status.append("⚠️ Finviz (install: pip install finvizfinance)")
+        except:
+            source_status.append("❌ Finviz")
+        
+        # Check API keys
+        if news_service.NEWSAPI_KEY:
+            source_status.append("✅ NewsAPI")
+        else:
+            source_status.append("⚠️ NewsAPI (add NEWSAPI_KEY to .env)")
+        
+        if news_service.ALPHA_VANTAGE_KEY:
+            source_status.append("✅ Alpha Vantage")
+        else:
+            source_status.append("⚠️ Alpha Vantage (add ALPHA_VANTAGE_KEY to .env)")
+        
+        # Check feedparser for MarketWatch
+        try:
+            import feedparser
+            source_status.append("✅ MarketWatch")
+        except ImportError:
+            source_status.append("⚠️ MarketWatch (install: pip install feedparser)")
+        
+        # Display status in columns
+        source_cols = st.columns(len(source_status))
+        for i, status in enumerate(source_status):
+            with source_cols[i]:
+                st.caption(status)
+        
+        st.info("💡 To add more sources, set API keys in .env file. See NEWS_API_SETUP.md for details.")
+        
+        st.caption("📡 Data aggregated from all available sources")
         
         if st.button("📰 Refresh News", type="secondary"):
             with st.spinner("Fetching news for current symbol..."):
