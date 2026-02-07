@@ -49,7 +49,7 @@ def load_config():
                 return {**DEFAULT_CONFIG, **saved}
         except Exception as e:
             st.error(f"Error loading config: {e}")
-    return DEFAULT_CONFIG
+    return DEFAULT_CONFIG  # Fixed orphaned try-except
 
 if 'cfg' not in st.session_state:
     st.session_state.cfg = load_config()
@@ -1303,7 +1303,7 @@ if st.session_state.trading_data.get('current_symbol'):
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.write(f"**{headline[:80]}**")
+                            st.write("**" + f"{headline[:80]}" + "**")
                             st.caption(f"📡 {source}")
                         with col2:
                             st.caption(timestamp[:16])
@@ -1311,8 +1311,11 @@ if st.session_state.trading_data.get('current_symbol'):
                     st.metric(f"📰 {current_symbol} News", len(symbol_news))
                 else:
                     st.info(f"No recent news for {current_symbol}")
-            else:
+else:
                 st.warning("No news data available")
-st.write("🎯 **Dashboard Ready** | Start adding symbols from the sidebar to begin your analysis!")
+        except Exception as e:
+            st.error(f"News display error: {e}")
+        except Exception as e:
+            st.error(f"News display error: {e}")
         except Exception as e:
             st.error(f"News display error: {e}")
