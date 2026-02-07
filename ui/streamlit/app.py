@@ -1783,8 +1783,8 @@ if st.session_state.trading_data.get('current_symbol'):
                         timestamp = item.get('timestamp', '')
                         url = item.get('url', '')
                         sentiment = item.get('sentiment', 'neutral')
-                        sentiment_score = item.get('sentiment_score', 0)
-                        
+                         sentiment_score = item.get('sentiment_score', 0)
+                         
                          # Format sentiment display with emojis only
                          if sentiment in ['positive', 'bullish']:
                              sentiment_emoji = '🟢'
@@ -1801,8 +1801,8 @@ if st.session_state.trading_data.get('current_symbol'):
                              else:
                                  st.markdown(f"**{headline[:80]}** {sentiment_emoji}")
                              st.caption(f"📡 {source}")
-                        with col2:
-                            st.caption(timestamp[:16] if timestamp else 'N/A')
+                         with col2:
+                             st.caption(timestamp[:16] if timestamp else 'N/A')
                     
                     # Show more in expander if there are more items
                     if len(symbol_news) > display_count:
